@@ -1,26 +1,102 @@
 @import "tailwindcss";
+@import "../../node_modules/98.css/dist/98.css";
+
+/*
+ * BetPal — Win98 chrome with mobile-aware layout.
+ *
+ * Rules of engagement (do not break these):
+ *  - 98.css owns ALL visual chrome: borders, buttons, fieldsets, title bars,
+ *    inputs, scrollbars. Never restyle these with Tailwind.
+ *  - Tailwind is for LAYOUT ONLY: flex, grid, gap, padding, width, max-width,
+ *    responsive breakpoints. Never colors/borders/typography.
+ *  - The desktop teal background and the windows-on-desktop look are invariant.
+ *  - On mobile (<768px), windows become full-bleed cards stacked vertically;
+ *    the taskbar collapses to a fixed bottom strip.
+ */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --betpal-desktop-bg: #008080;
+  --betpal-content-max: 960px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--betpal-desktop-bg);
+  font-family:
+    "Pixelated MS Sans Serif", "MS Sans Serif", "Microsoft Sans Serif",
+    Tahoma, sans-serif;
+  font-size: 11px;
+  color: #000;
+  overflow-x: hidden;
+}
+
+/* Desktop: roomy padding, windows centered. Mobile: edge-to-edge. */
+.betpal-desktop {
+  min-height: 100vh;
+  padding: 24px 16px 56px 16px; /* bottom space for taskbar */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .betpal-desktop {
+    padding: 8px 6px 56px 6px;
+    gap: 8px;
+  }
+}
+
+/* The Win98 .window from 98.css; we constrain its width on desktop only. */
+.betpal-window {
+  width: 100%;
+  max-width: var(--betpal-content-max);
+}
+
+/* Title bars — make sure long titles still truncate cleanly on small screens. */
+.title-bar-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Taskbar — pinned to the bottom of the viewport, classic Win98 inset look. */
+.betpal-taskbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  background: #c0c0c0;
+  border-top: 2px solid #ffffff;
+  box-shadow:
+    inset 0 1px 0 #dfdfdf,
+    0 -1px 0 #808080;
+  z-index: 100;
+}
+
+.betpal-taskbar .betpal-clock {
+  margin-left: auto;
+  border: 1px solid #808080;
+  box-shadow: inset 1px 1px 0 #000;
+  padding: 2px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Utility for making 98.css fields full-width on mobile. */
+.betpal-stretch input[type="text"],
+.betpal-stretch input[type="email"],
+.betpal-stretch input[type="number"],
+.betpal-stretch input[type="search"],
+.betpal-stretch select,
+.betpal-stretch textarea {
+  width: 100%;
 }
