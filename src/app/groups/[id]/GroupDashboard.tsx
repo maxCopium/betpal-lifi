@@ -11,6 +11,8 @@ import { useCallback, useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
 import { DepositForm } from "./DepositForm";
+import { NewBetDialog } from "./NewBetDialog";
+import { BetList } from "./BetList";
 
 type GroupRow = {
   id: string;
@@ -51,6 +53,8 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
   const [balance, setBalance] = useState<BalanceResponse | null>(null);
+  const [newBetOpen, setNewBetOpen] = useState(false);
+  const [betsRefreshKey, setBetsRefreshKey] = useState(0);
 
   const loadBalance = useCallback(async () => {
     try {
@@ -182,6 +186,25 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
         <strong>Deposit</strong>
         <DepositForm groupId={groupId} />
       </div>
+      <hr style={{ marginTop: 8, marginBottom: 8 }} />
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <strong>Bets</strong>
+          <button
+            onClick={() => setNewBetOpen(true)}
+            disabled={group.status === "closed"}
+          >
+            New bet
+          </button>
+        </div>
+        <BetList groupId={groupId} refreshKey={betsRefreshKey} />
+      </div>
+      <NewBetDialog
+        open={newBetOpen}
+        groupId={groupId}
+        onClose={() => setNewBetOpen(false)}
+        onCreated={() => setBetsRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 }
