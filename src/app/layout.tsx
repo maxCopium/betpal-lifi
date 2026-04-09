@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { PrivyAppProvider } from "@/components/PrivyAppProvider";
 
 export const metadata: Metadata = {
   title: "BetPal",
@@ -14,7 +15,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <PrivyAppProvider>{children}</PrivyAppProvider>
+      </body>
     </html>
   );
 }

@@ -1,4 +1,5 @@
 import "server-only";
+import Safe from "@safe-global/protocol-kit";
 import { env } from "./env";
 
 /**
@@ -88,6 +89,53 @@ export function assertSafeInvariants(cfg: {
   if (appAlone >= cfg.threshold) {
     throw new Error("Safe invariant violated: app key alone meets threshold");
   }
+}
+
+/**
+ * Predict the counterfactual Safe address for a given group config without
+ * deploying anything. Uses the Safe SDK in `predictedSafe` mode.
+ *
+ * Note: this still requires a valid RPC URL because the SDK reads the
+ * SafeProxyFactory contract address from on-chain configuration. Cheap call,
+ * no transaction.
+ */
+export async function predictGroupSafeAddress(cfg: SafeConfigOutput): Promise<`0x${string}`> {
+  const safe = await Safe.init({
+    provider: env.baseRpcUrl(),
+    predictedSafe: {
+      safeAccountConfig: {
+        owners: cfg.owners,
+        threshold: cfg.threshold,
+      },
+      safeDeploymentConfig: {
+        saltNonce: cfg.saltNonce,
+      },
+    },
+  });
+  const address = await safe.getAddress();
+  return address as `0x${string}`;
+}
+
+/**
+ * Read the live owners + threshold from a deployed Safe and assert that they
+ * still match our invariants. Call this after every deployment, and after any
+ * owner-management transaction.
+ */
+export async function assertDeployedSafeInvariants(
+  safeAddress: `0x${string}`,
+): Promise<{ owners: `0x${string}`[]; threshold: number }> {
+  const safe = await Safe.init({
+    provider: env.baseRpcUrl(),
+    safeAddress,
+  });
+  const deployed = await safe.isSafeDeployed();
+  if (!deployed) {
+    throw new Error(`Safe ${safeAddress} is not deployed yet`);
+  }
+  const owners = (await safe.getOwners()) as `0x${string}`[];
+  const threshold = await safe.getThreshold();
+  assertSafeInvariants({ owners, threshold });
+  return { owners, threshold };
 }
 
 /** Tiny SHA-256 → hex helper using the global Web Crypto. */
