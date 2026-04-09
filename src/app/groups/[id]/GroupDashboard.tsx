@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
 import { DepositForm } from "./DepositForm";
+import { WithdrawForm } from "./WithdrawForm";
 import { NewBetDialog } from "./NewBetDialog";
 import { BetList } from "./BetList";
 
@@ -36,6 +37,13 @@ type BalanceResponse = {
   group_total_cents: number;
 };
 
+type ReconcileResponse = {
+  ledger_cents: number;
+  onchain_cents: number | null;
+  drift_cents: number | null;
+  onchain_available: boolean;
+};
+
 function fmtCents(c: number): string {
   const dollars = c / 100;
   return dollars.toLocaleString("en-US", {
@@ -53,8 +61,24 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
   const [balance, setBalance] = useState<BalanceResponse | null>(null);
+  const [reconcile, setReconcile] = useState<ReconcileResponse | null>(null);
+  const [reconciling, setReconciling] = useState(false);
   const [newBetOpen, setNewBetOpen] = useState(false);
   const [betsRefreshKey, setBetsRefreshKey] = useState(0);
+
+  async function runReconcile() {
+    setReconciling(true);
+    try {
+      const r = await authedFetch<ReconcileResponse>(
+        `/api/groups/${groupId}/reconcile`,
+      );
+      setReconcile(r);
+    } catch (e) {
+      console.warn("reconcile failed:", e);
+    } finally {
+      setReconciling(false);
+    }
+  }
 
   const loadBalance = useCallback(async () => {
     try {
@@ -170,21 +194,56 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
       </div>
       <hr style={{ marginTop: 8, marginBottom: 8 }} />
       <div className="flex flex-col gap-1">
-        <strong>Balance</strong>
+        <div className="flex items-center justify-between">
+          <strong>Balance</strong>
+          <button onClick={runReconcile} disabled={reconciling}>
+            {reconciling ? "Checking…" : "Reconcile vs vault"}
+          </button>
+        </div>
         {balance ? (
           <ul className="text-xs" style={{ margin: 0, paddingLeft: 16 }}>
             <li>Your share: {fmtCents(balance.user_balance_cents)}</li>
             <li>Free (not in open bets): {fmtCents(balance.user_free_cents)}</li>
-            <li>Group total: {fmtCents(balance.group_total_cents)}</li>
+            <li>Group total (ledger): {fmtCents(balance.group_total_cents)}</li>
           </ul>
         ) : (
           <span className="text-xs">Loading…</span>
+        )}
+        {reconcile && (
+          <div className="text-xs" style={{ marginTop: 4 }}>
+            On-chain vault:{" "}
+            {reconcile.onchain_available && reconcile.onchain_cents !== null
+              ? fmtCents(reconcile.onchain_cents)
+              : "(Safe not deployed yet)"}
+            {reconcile.drift_cents !== null && (
+              <>
+                {" · drift "}
+                <span
+                  style={{
+                    color:
+                      Math.abs(reconcile.drift_cents) > 100 ? "#a00" : "inherit",
+                  }}
+                >
+                  {fmtCents(reconcile.drift_cents)}
+                </span>
+              </>
+            )}
+          </div>
         )}
       </div>
       <hr style={{ marginTop: 8, marginBottom: 8 }} />
       <div className="flex flex-col gap-1">
         <strong>Deposit</strong>
         <DepositForm groupId={groupId} />
+      </div>
+      <hr style={{ marginTop: 8, marginBottom: 8 }} />
+      <div className="flex flex-col gap-1">
+        <strong>Withdraw</strong>
+        <WithdrawForm
+          groupId={groupId}
+          safeAddress={group.safe_address}
+          onWithdrawn={loadBalance}
+        />
       </div>
       <hr style={{ marginTop: 8, marginBottom: 8 }} />
       <div className="flex flex-col gap-1">
