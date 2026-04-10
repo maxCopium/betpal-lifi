@@ -165,6 +165,8 @@ create table if not exists transactions (
                         check (status in
                           ('pending','executing','completed','failed','reverted','expired')),
   error_message       text,
+  intended_bet_id     uuid references bets(id),
+  intended_outcome    text,
   idempotency_key     text not null unique,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now()

@@ -41,6 +41,8 @@ export type PolymarketMarket = z.infer<typeof MarketSchema>;
 export async function searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
   const url = new URL(`${GAMMA}/markets`);
   url.searchParams.set("limit", String(limit));
+  url.searchParams.set("closed", "false");
+  url.searchParams.set("active", "true");
   if (query) url.searchParams.set("search", query);
   const res = await fetch(url.toString(), {
     headers: { accept: "application/json" },
@@ -48,6 +50,25 @@ export async function searchMarkets(query: string, limit = 20): Promise<Polymark
   });
   if (!res.ok) {
     throw new Error(`Polymarket /markets failed: ${res.status}`);
+  }
+  const json = await res.json();
+  const arr = Array.isArray(json) ? json : (json.data ?? []);
+  return z.array(MarketSchema).parse(arr);
+}
+
+export async function trendingMarkets(limit = 10): Promise<PolymarketMarket[]> {
+  const url = new URL(`${GAMMA}/markets`);
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("closed", "false");
+  url.searchParams.set("active", "true");
+  url.searchParams.set("order", "volume");
+  url.searchParams.set("ascending", "false");
+  const res = await fetch(url.toString(), {
+    headers: { accept: "application/json" },
+    next: { revalidate: 300 },
+  });
+  if (!res.ok) {
+    throw new Error(`Polymarket /markets trending failed: ${res.status}`);
   }
   const json = await res.json();
   const arr = Array.isArray(json) ? json : (json.data ?? []);

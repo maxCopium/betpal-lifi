@@ -14,6 +14,7 @@
  * Search is debounced (~350ms) to keep Polymarket happy.
  */
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { authedFetch } from "@/lib/clientFetch";
 
 type SearchResult = {
@@ -45,12 +46,31 @@ export function NewBetDialog({
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [trending, setTrending] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [picked, setPicked] = useState<SearchResult | null>(null);
   const [joinDeadline, setJoinDeadline] = useState(defaultJoinDeadline);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  // Load trending markets on open.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await authedFetch<{ markets: SearchResult[] }>(
+          "/api/polymarket/trending?limit=10",
+        );
+        if (!cancelled) setTrending(data.markets);
+      } catch {
+        // Non-critical — search still works.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open]);
 
   // Debounced search.
   useEffect(() => {
@@ -85,6 +105,7 @@ export function NewBetDialog({
     if (open) {
       setQuery("");
       setResults([]);
+      setTrending([]);
       setPicked(null);
       setError(null);
       setJoinDeadline(defaultJoinDeadline());
@@ -92,6 +113,8 @@ export function NewBetDialog({
   }, [open]);
 
   if (!open) return null;
+
+  const displayList = query.trim() ? results : trending;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -112,6 +135,7 @@ export function NewBetDialog({
       });
       onCreated(bet.id);
       onClose();
+      router.push(`/bets/${bet.id}`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -158,13 +182,18 @@ export function NewBetDialog({
               className="sunken-panel"
               style={{ maxHeight: 200, overflowY: "auto" }}
             >
-              {results.length === 0 && !searching && (
+              {!query.trim() && trending.length > 0 && (
+                <p className="text-xs" style={{ padding: "4px 8px", opacity: 0.6, margin: 0 }}>
+                  Trending on Polymarket
+                </p>
+              )}
+              {displayList.length === 0 && !searching && (
                 <p className="text-xs" style={{ padding: 8 }}>
-                  {query ? "No matches." : "Type a query to search."}
+                  {query ? "No matches." : "Loading trending..."}
                 </p>
               )}
               <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-                {results.map((r) => (
+                {displayList.map((r) => (
                   <li key={r.id}>
                     <button
                       type="button"

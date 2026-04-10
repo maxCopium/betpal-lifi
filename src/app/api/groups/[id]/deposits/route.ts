@@ -30,11 +30,17 @@ import { getComposerQuote } from "@/lib/composer";
  * Per Next 16 conventions, `params` is a Promise and must be awaited.
  */
 
-const Body = z.object({
-  fromChain: z.number().int().positive(),
-  fromToken: z.string().min(1),
-  fromAmount: z.string().regex(/^\d+$/, "fromAmount must be a base-units integer string"),
-});
+const Body = z
+  .object({
+    fromChain: z.number().int().positive(),
+    fromToken: z.string().min(1),
+    fromAmount: z.string().regex(/^\d+$/, "fromAmount must be a base-units integer string"),
+    betId: z.string().uuid().optional(),
+    outcome: z.string().min(1).max(80).optional(),
+  })
+  .refine((d) => (d.betId == null) === (d.outcome == null), {
+    message: "betId and outcome must both be present or both absent",
+  });
 
 /**
  * Derive ledger cents from Composer's guaranteed minimum output (toAmountMin).
@@ -73,6 +79,28 @@ export async function POST(
     if (memErr) throw new HttpError(500, `member check failed: ${memErr.message}`);
     if (!membership) throw new HttpError(403, "not a member of this group");
 
+    // Validate bet intent if provided.
+    if (body.betId && body.outcome) {
+      const { data: bet, error: betErr } = await sb
+        .from("bets")
+        .select("id, group_id, status, options, join_deadline")
+        .eq("id", body.betId)
+        .single();
+      if (betErr || !bet) throw new HttpError(404, "bet not found");
+      if (bet.group_id !== groupId) throw new HttpError(400, "bet does not belong to this group");
+      if (bet.status !== "open") throw new HttpError(409, "bet is no longer open");
+      if (new Date(bet.join_deadline) <= new Date()) throw new HttpError(409, "bet join deadline has passed");
+      const options = bet.options as string[];
+      if (!options.includes(body.outcome)) throw new HttpError(400, `invalid outcome: ${body.outcome}`);
+      const { data: existingStake } = await sb
+        .from("stakes")
+        .select("id")
+        .eq("bet_id", body.betId)
+        .eq("user_id", me.id)
+        .maybeSingle();
+      if (existingStake) throw new HttpError(409, "you already have a stake on this bet");
+    }
+
     // Look up the group's safe + vault.
     const { data: group, error: groupErr } = await sb
       .from("groups")
@@ -105,7 +133,9 @@ export async function POST(
     // Insert pending transactions row. Use a deterministic-enough idempotency
     // key combining quote id + caller — this prevents accidental duplicates if
     // the user clicks "Quote" twice with the same inputs.
-    const idempotencyKey = `deposit_quote:${quote.id}:${me.id}`;
+    const idempotencyKey = body.betId
+      ? `deposit_quote:${quote.id}:${me.id}:${body.betId}`
+      : `deposit_quote:${quote.id}:${me.id}`;
     const depositId = randomUUID();
     const { data: txRow, error: txErr } = await sb
       .from("transactions")
@@ -122,6 +152,8 @@ export async function POST(
         composer_route_id: quote.id,
         status: "pending",
         idempotency_key: idempotencyKey,
+        intended_bet_id: body.betId ?? null,
+        intended_outcome: body.outcome ?? null,
       })
       .select("id")
       .single();

@@ -33,7 +33,7 @@ export async function POST(
     const { data: tx, error: txErr } = await sb
       .from("transactions")
       .select(
-        "id, group_id, user_id, status, tx_hash, source_chain, dest_chain, amount_cents",
+        "id, group_id, user_id, status, tx_hash, source_chain, dest_chain, amount_cents, intended_bet_id, intended_outcome",
       )
       .eq("id", depositId)
       .maybeSingle();
@@ -95,7 +95,52 @@ export async function POST(
         .eq("id", groupId)
         .eq("status", "pending");
 
-      return Response.json({ status: "completed" }, { status: 200 });
+      // Auto-stake if this deposit was targeted at a bet.
+      let stakeStatus: string | null = null;
+      if (tx.intended_bet_id && tx.intended_outcome) {
+        try {
+          // Re-validate: bet may have closed or deadline passed during bridge.
+          const { data: bet } = await sb
+            .from("bets")
+            .select("status, join_deadline, options")
+            .eq("id", tx.intended_bet_id)
+            .single();
+
+          if (!bet || bet.status !== "open") {
+            stakeStatus = "skipped_closed";
+          } else if (new Date(bet.join_deadline) <= new Date()) {
+            stakeStatus = "skipped_deadline";
+          } else {
+            // Insert stake (unique constraint on bet_id + user_id).
+            const { error: stakeErr } = await sb.from("stakes").insert({
+              bet_id: tx.intended_bet_id,
+              user_id: me.id,
+              outcome_chosen: tx.intended_outcome,
+              amount_cents: amountCents,
+            });
+            if (stakeErr?.code === "23505") {
+              stakeStatus = "skipped_duplicate";
+            } else if (stakeErr) {
+              stakeStatus = "skipped_error";
+            } else {
+              // Lock funds in ledger.
+              await addBalanceEvent({
+                groupId,
+                userId: me.id,
+                deltaCents: -amountCents,
+                reason: "stake_lock",
+                betId: tx.intended_bet_id,
+                idempotencyKey: `stake_lock:${tx.intended_bet_id}:${me.id}`,
+              });
+              stakeStatus = "created";
+            }
+          }
+        } catch {
+          stakeStatus = "skipped_error";
+        }
+      }
+
+      return Response.json({ status: "completed", stake_status: stakeStatus }, { status: 200 });
     }
 
     if (result.status === "FAILED") {

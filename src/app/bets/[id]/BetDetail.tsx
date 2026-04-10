@@ -1,19 +1,22 @@
 "use client";
 
 /**
- * BetDetail — view a bet, its stakes, and place / inspect your own stake.
+ * BetDetail — view a bet, its stakes, and join via deposit-and-bet or
+ * stake from existing balance.
  *
  * Sections:
  *   - Header: title, status, deadline, Polymarket link
  *   - Per-outcome stake summary (count, total cents)
- *   - Stake form (only if status=open, not yet staked, deadline not passed)
- *   - "Resolve now" button (only when status=open, deadline passed) → calls
- *     the resolution endpoint which polls Polymarket and either keeps it in
- *     `locked`/`resolving` state or settles it.
+ *   - "Join this bet" form:
+ *       Primary: deposit & bet in one action (uses useDepositFlow)
+ *       Secondary: stake from existing group balance
+ *   - "Resolve now" button (only when status=open, deadline passed)
  */
 import { useCallback, useEffect, useState } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
+import { CopyProgressDialog } from "@/components/win98/CopyProgressDialog";
+import { useDepositFlow, SOURCES } from "@/hooks/useDepositFlow";
 
 type Bet = {
   id: string;
@@ -55,12 +58,16 @@ function fmtCents(c: number) {
 
 export function BetDetail({ betId }: { betId: string }) {
   const { ready, authenticated, login } = usePrivy();
+  const { wallets } = useWallets();
   const [data, setData] = useState<DetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState("");
   const [amountUsd, setAmountUsd] = useState("5");
+  const [sourceIdx, setSourceIdx] = useState(0);
+  const [mode, setMode] = useState<"deposit" | "balance">("deposit");
   const [submitting, setSubmitting] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const flow = useDepositFlow();
 
   const reload = useCallback(async () => {
     try {
@@ -72,7 +79,6 @@ export function BetDetail({ betId }: { betId: string }) {
     } catch (e) {
       setError((e as Error).message);
     }
-    // outcome intentionally excluded from deps — we only want to seed it once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [betId]);
 
@@ -81,7 +87,12 @@ export function BetDetail({ betId }: { betId: string }) {
     void reload();
   }, [ready, authenticated, reload]);
 
-  if (!ready) return <p>Loading…</p>;
+  // Reload bet data after deposit flow completes.
+  useEffect(() => {
+    if (flow.stakeStatus) void reload();
+  }, [flow.stakeStatus, reload]);
+
+  if (!ready) return <p>Loading...</p>;
   if (!authenticated) {
     return (
       <div className="flex flex-col gap-3">
@@ -92,13 +103,12 @@ export function BetDetail({ betId }: { betId: string }) {
       </div>
     );
   }
-  if (error) return <p style={{ color: "#a00" }}>{error}</p>;
-  if (!data) return <p>Loading bet…</p>;
+  if (error && !data) return <p style={{ color: "#a00" }}>{error}</p>;
+  if (!data) return <p>Loading bet...</p>;
 
   const { bet, stakes, my_stake } = data;
   const joinPassed = new Date(bet.join_deadline).getTime() <= Date.now();
 
-  // Per-outcome aggregates with the list of stakers (for the pool display).
   const buckets = new Map<
     string,
     { count: number; cents: number; stakers: { label: string; cents: number }[] }
@@ -117,7 +127,25 @@ export function BetDetail({ betId }: { betId: string }) {
   }
   const totalCents = stakes.reduce((a, s) => a + Number(s.amount_cents), 0);
 
-  async function placeStake(e: React.FormEvent) {
+  async function depositAndBet(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const wallet = wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
+    if (!wallet) {
+      setError("no wallet available — sign in first");
+      return;
+    }
+    await flow.execute({
+      groupId: bet.group_id,
+      source: SOURCES[sourceIdx],
+      amount: amountUsd,
+      wallet,
+      betId: bet.id,
+      outcome,
+    });
+  }
+
+  async function stakeFromBalance(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
@@ -150,6 +178,8 @@ export function BetDetail({ betId }: { betId: string }) {
       setResolving(false);
     }
   }
+
+  const canJoin = !my_stake && bet.status === "open" && !joinPassed;
 
   return (
     <div className="flex flex-col gap-2 text-sm">
@@ -203,41 +233,104 @@ export function BetDetail({ betId }: { betId: string }) {
         </>
       )}
 
-      {!my_stake && bet.status === "open" && !joinPassed && (
+      {canJoin && (
         <>
           <hr style={{ margin: "8px 0" }} />
-          <strong>Place stake</strong>
-          <form onSubmit={placeStake} className="flex flex-col gap-2">
-            <div className="field-row-stacked">
-              <label htmlFor="stake-outcome">Outcome</label>
-              <select
-                id="stake-outcome"
-                value={outcome}
-                onChange={(e) => setOutcome(e.target.value)}
-              >
-                {bet.options.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field-row-stacked">
-              <label htmlFor="stake-amount">Amount (USD)</label>
+          <strong>Join this bet</strong>
+          <div className="flex gap-2 text-xs" style={{ marginBottom: 4 }}>
+            <label>
               <input
-                id="stake-amount"
-                type="text"
-                inputMode="decimal"
-                value={amountUsd}
-                onChange={(e) => setAmountUsd(e.target.value)}
-              />
-            </div>
-            <div>
-              <button type="submit" disabled={submitting}>
-                {submitting ? "Locking…" : "Lock stake"}
-              </button>
-            </div>
-          </form>
+                type="radio"
+                name="join-mode"
+                checked={mode === "deposit"}
+                onChange={() => setMode("deposit")}
+              />{" "}
+              Deposit & bet
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="join-mode"
+                checked={mode === "balance"}
+                onChange={() => setMode("balance")}
+              />{" "}
+              Bet from balance
+            </label>
+          </div>
+
+          {mode === "deposit" ? (
+            <form onSubmit={depositAndBet} className="flex flex-col gap-2">
+              <div className="field-row-stacked">
+                <label htmlFor="join-outcome">Outcome</label>
+                <select
+                  id="join-outcome"
+                  value={outcome}
+                  onChange={(e) => setOutcome(e.target.value)}
+                >
+                  {bet.options.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field-row-stacked">
+                <label htmlFor="join-amount">Amount (USDC)</label>
+                <input
+                  id="join-amount"
+                  type="text"
+                  inputMode="decimal"
+                  value={amountUsd}
+                  onChange={(e) => setAmountUsd(e.target.value)}
+                />
+              </div>
+              <div className="field-row-stacked">
+                <label htmlFor="join-source">Source</label>
+                <select
+                  id="join-source"
+                  value={sourceIdx}
+                  onChange={(e) => setSourceIdx(Number(e.target.value))}
+                >
+                  {SOURCES.map((s, i) => (
+                    <option key={s.label} value={i}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <button type="submit">
+                  Bet ${amountUsd} on {outcome || "..."}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={stakeFromBalance} className="flex flex-col gap-2">
+              <div className="field-row-stacked">
+                <label htmlFor="bal-outcome">Outcome</label>
+                <select
+                  id="bal-outcome"
+                  value={outcome}
+                  onChange={(e) => setOutcome(e.target.value)}
+                >
+                  {bet.options.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field-row-stacked">
+                <label htmlFor="bal-amount">Amount (USD)</label>
+                <input
+                  id="bal-amount"
+                  type="text"
+                  inputMode="decimal"
+                  value={amountUsd}
+                  onChange={(e) => setAmountUsd(e.target.value)}
+                />
+              </div>
+              <div>
+                <button type="submit" disabled={submitting}>
+                  {submitting ? "Locking..." : "Stake from balance"}
+                </button>
+              </div>
+            </form>
+          )}
         </>
       )}
 
@@ -246,7 +339,7 @@ export function BetDetail({ betId }: { betId: string }) {
           <hr style={{ margin: "8px 0" }} />
           <div className="flex items-center gap-2">
             <button onClick={tryResolve} disabled={resolving}>
-              {resolving ? "Checking Polymarket…" : "Try to resolve"}
+              {resolving ? "Checking Polymarket..." : "Try to resolve"}
             </button>
             <span className="text-xs">
               Join deadline passed. Polymarket must be settled before payouts run.
@@ -255,11 +348,21 @@ export function BetDetail({ betId }: { betId: string }) {
         </>
       )}
 
-      {error && (
+      {(error || flow.error) && (
         <p className="text-xs" style={{ color: "#a00" }}>
-          {error}
+          {error || flow.error}
         </p>
       )}
+
+      <CopyProgressDialog
+        open={flow.open}
+        title="Depositing & betting..."
+        status={flow.status}
+        progress={flow.progress}
+        fromLabel={SOURCES[sourceIdx].label}
+        toLabel={`Bet: ${outcome || "..."}`}
+        onClose={flow.reset}
+      />
     </div>
   );
 }
