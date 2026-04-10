@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { PrivyAppProvider } from "@/components/PrivyAppProvider";
+import { AppShell } from "@/components/win98/AppShell";
 
 export const metadata: Metadata = {
   title: "BetPal",
@@ -16,7 +17,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <PrivyAppProvider>{children}</PrivyAppProvider>
+        <PrivyAppProvider>
+          <AppShell>{children}</AppShell>
+        </PrivyAppProvider>
       </body>
     </html>
   );
