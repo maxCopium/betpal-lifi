@@ -111,35 +111,43 @@ describe("isMarketSettleable", () => {
     expect(r.settleable).toBe(true);
   });
 
-  // UMA resolution status checks
-  it("rejects when umaResolutionStatus is 'proposed' (dispute window open)", () => {
+  // UMA resolution status checks (plural JSON string array from Gamma API)
+  it("rejects when umaResolutionStatuses contains 'proposed' (dispute window open)", () => {
     const r = isMarketSettleable(
-      mkt({ umaResolutionStatus: "proposed" }),
+      mkt({ umaResolutionStatuses: '["proposed"]' } as Partial<PolymarketMarket>),
       NOW_PAST,
     );
     expect(r.settleable).toBe(false);
     expect(r.reason).toMatch(/UMA/);
   });
 
-  it("allows when umaResolutionStatus is 'resolved'", () => {
+  it("allows when umaResolutionStatuses contains 'resolved'", () => {
     const r = isMarketSettleable(
-      mkt({ umaResolutionStatus: "resolved" }),
+      mkt({ umaResolutionStatuses: '["resolved"]' } as Partial<PolymarketMarket>),
       NOW_PAST,
     );
     expect(r.settleable).toBe(true);
   });
 
-  it("allows when umaResolutionStatus is absent (older markets)", () => {
+  it("allows when umaResolutionStatuses is absent (older markets)", () => {
     const r = isMarketSettleable(
-      mkt({ umaResolutionStatus: undefined }),
+      mkt({ umaResolutionStatuses: undefined } as Partial<PolymarketMarket>),
       NOW_PAST,
     );
     expect(r.settleable).toBe(true);
   });
 
-  it("rejects when umaResolutionStatus is 'disputed'", () => {
+  it("allows when umaResolutionStatuses is empty array '[]'", () => {
     const r = isMarketSettleable(
-      mkt({ umaResolutionStatus: "disputed" }),
+      mkt({ umaResolutionStatuses: "[]" } as Partial<PolymarketMarket>),
+      NOW_PAST,
+    );
+    expect(r.settleable).toBe(true);
+  });
+
+  it("rejects when umaResolutionStatuses contains 'disputed'", () => {
+    const r = isMarketSettleable(
+      mkt({ umaResolutionStatuses: '["disputed"]' } as Partial<PolymarketMarket>),
       NOW_PAST,
     );
     expect(r.settleable).toBe(false);

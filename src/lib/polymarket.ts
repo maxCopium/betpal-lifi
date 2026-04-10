@@ -28,8 +28,9 @@ const MarketSchema = z
     endDate: z.string().optional(),
     outcomes: z.union([z.array(z.string()), z.string()]).optional(),
     outcomePrices: z.union([z.array(z.string()), z.string()]).optional(),
-    // Resolution-side fields (verify exact names on Day 0):
-    umaResolutionStatus: z.string().optional(),
+    // Real API uses plural `umaResolutionStatuses` — a JSON-encoded string
+    // array like '["resolved"]' or '[]'. Verified against live Gamma API.
+    umaResolutionStatuses: z.string().optional(),
     resolvedBy: z.string().optional(),
     acceptingOrders: z.boolean().optional(),
   })
@@ -82,13 +83,13 @@ export function isMarketSettleable(
 ): { settleable: boolean; winningOutcome?: string; reason?: string } {
   if (!m.closed) return { settleable: false, reason: "not closed" };
 
-  // Require UMA resolution to be complete. The `umaResolutionStatus` field is
-  // absent on open markets and set to "resolved" after the dispute window. If
-  // the field is present but NOT "resolved" (e.g. "proposed"), the market is
-  // still in the UMA dispute window — settling now would risk paying out on a
-  // result that gets overturned.
-  if (m.umaResolutionStatus !== undefined && m.umaResolutionStatus !== "resolved") {
-    return { settleable: false, reason: `UMA status: ${m.umaResolutionStatus}` };
+  // Require UMA resolution to be complete. The Gamma API returns
+  // `umaResolutionStatuses` as a JSON-encoded string array, e.g.
+  // '["resolved"]' or '[]'. If the array is non-empty but does NOT contain
+  // "resolved", the market is still in the UMA dispute window.
+  const umaStatuses = parseUmaStatuses(m.umaResolutionStatuses);
+  if (umaStatuses.length > 0 && !umaStatuses.includes("resolved")) {
+    return { settleable: false, reason: `UMA status: ${umaStatuses.join(", ")}` };
   }
 
   // Buffer past closure (heuristic fallback when umaResolutionStatus is absent)
@@ -110,6 +111,20 @@ export function isMarketSettleable(
     return { settleable: false, reason: "no decisive outcome price" };
   }
   return { settleable: true, winningOutcome: outcomes[maxIdx] };
+}
+
+/**
+ * Parse the `umaResolutionStatuses` field from the Gamma API.
+ * It's a JSON-encoded string array like '["resolved"]' or '[]', or undefined.
+ */
+function parseUmaStatuses(raw: string | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 function parseStringArray(v: unknown): string[] | undefined {

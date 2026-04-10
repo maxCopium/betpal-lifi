@@ -39,7 +39,7 @@ export async function requireUser(req: Request): Promise<AuthedUser> {
   // wallet address to deploy the Safe, so it's not optional.
   const privyUser = await privy().getUser(claims.userId);
   const wallet = privyUser.linkedAccounts?.find(
-    (a) => a.type === "wallet",
+    (a) => a.type === "wallet" && (a as { walletClientType?: string }).walletClientType === "privy",
   ) as { address?: string } | undefined;
   if (!wallet?.address) {
     throw new HttpError(400, "user has no linked wallet");
