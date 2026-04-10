@@ -3,10 +3,10 @@
 /**
  * NewGroupForm — Win98-styled form for creating a betting group.
  *
- * Adds debounced friend search so members can be added at creation time.
- * Picked friends are tracked in a local Set; the form posts their BetPal
- * users.id values as `memberIds`. Invite-link flow is still available
- * post-creation for anyone not yet on BetPal.
+ * Includes:
+ *   - Group name
+ *   - Yield strategy picker (powered by LI.FI Earn API)
+ *   - Friend search for adding members
  */
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -29,13 +29,35 @@ type FriendResult = {
   wallet_address: string;
 };
 
+type VaultOption = {
+  address: string;
+  chainId: number;
+  name: string | null;
+  protocol: string;
+  asset: string;
+  apy: number | null;
+  tvl_usd: number | null;
+};
+
 function friendLabel(f: FriendResult): string {
   return (
     f.display_name ||
     f.ens_name ||
     f.basename ||
-    `${f.wallet_address.slice(0, 6)}…${f.wallet_address.slice(-4)}`
+    `${f.wallet_address.slice(0, 6)}...${f.wallet_address.slice(-4)}`
   );
+}
+
+function fmtApy(apy: number | null): string {
+  if (apy === null) return "-- %";
+  return `${(apy * 100).toFixed(2)}%`;
+}
+
+function fmtTvl(tvl: number | null): string {
+  if (tvl === null) return "";
+  if (tvl >= 1_000_000) return `$${(tvl / 1_000_000).toFixed(1)}M`;
+  if (tvl >= 1_000) return `$${(tvl / 1_000).toFixed(0)}K`;
+  return `$${tvl.toFixed(0)}`;
 }
 
 export function NewGroupForm() {
@@ -45,12 +67,41 @@ export function NewGroupForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Vault picker state.
+  const [vaults, setVaults] = useState<VaultOption[]>([]);
+  const [vaultsLoading, setVaultsLoading] = useState(false);
+  const [selectedVault, setSelectedVault] = useState<VaultOption | null>(null);
+
   // Friend search state.
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<FriendResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [picked, setPicked] = useState<FriendResult[]>([]);
 
+  // Load vaults from LI.FI Earn API on mount.
+  useEffect(() => {
+    if (!ready || !authenticated) return;
+    let cancelled = false;
+    setVaultsLoading(true);
+    (async () => {
+      try {
+        const data = await authedFetch<{ vaults: VaultOption[] }>(
+          "/api/earn/vaults?chainId=8453&asset=USDC&limit=10",
+        );
+        if (!cancelled) {
+          setVaults(data.vaults);
+          if (data.vaults.length > 0) setSelectedVault(data.vaults[0]);
+        }
+      } catch {
+        // Non-critical — will fall back to env default.
+      } finally {
+        if (!cancelled) setVaultsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ready, authenticated]);
+
+  // Debounced friend search.
   useEffect(() => {
     if (!authenticated) return;
     if (!query.trim() || query.trim().length < 2) {
@@ -65,7 +116,6 @@ export function NewGroupForm() {
           `/api/friends/search?q=${encodeURIComponent(query)}`,
         );
         if (!cancelled) {
-          // Filter out anyone already picked.
           const pickedIds = new Set(picked.map((p) => p.id));
           setResults(data.users.filter((u) => !pickedIds.has(u.id)));
         }
@@ -81,7 +131,7 @@ export function NewGroupForm() {
     };
   }, [query, authenticated, picked]);
 
-  if (!ready) return <p>Loading…</p>;
+  if (!ready) return <p>Loading...</p>;
   if (!authenticated) {
     return (
       <div className="flex flex-col gap-3">
@@ -103,12 +153,17 @@ export function NewGroupForm() {
     }
     setSubmitting(true);
     try {
+      const payload: Record<string, unknown> = {
+        name: trimmed,
+        memberIds: picked.map((p) => p.id),
+      };
+      if (selectedVault) {
+        payload.vaultAddress = selectedVault.address;
+        payload.vaultChainId = selectedVault.chainId;
+      }
       const group = await authedFetch<CreatedGroup>("/api/groups", {
         method: "POST",
-        body: JSON.stringify({
-          name: trimmed,
-          memberIds: picked.map((p) => p.id),
-        }),
+        body: JSON.stringify(payload),
       });
       router.push(`/groups/${group.id}`);
     } catch (err) {
@@ -132,6 +187,79 @@ export function NewGroupForm() {
         />
       </div>
 
+      {/* Yield strategy picker */}
+      <fieldset>
+        <legend>Yield strategy (LI.FI Earn)</legend>
+        {vaultsLoading ? (
+          <p className="text-xs">Loading yield opportunities...</p>
+        ) : vaults.length === 0 ? (
+          <p className="text-xs">Using default Morpho USDC vault on Base.</p>
+        ) : (
+          <div
+            className="sunken-panel"
+            style={{ maxHeight: 180, overflowY: "auto" }}
+          >
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <thead>
+                <tr style={{ textAlign: "left", borderBottom: "1px solid #808080" }}>
+                  <th style={{ padding: "2px 6px" }}></th>
+                  <th style={{ padding: "2px 6px" }}>Protocol</th>
+                  <th style={{ padding: "2px 6px" }}>APY</th>
+                  <th style={{ padding: "2px 6px" }}>TVL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vaults.map((v) => {
+                  const isSelected = selectedVault?.address === v.address;
+                  return (
+                    <tr
+                      key={v.address}
+                      onClick={() => setSelectedVault(v)}
+                      style={{
+                        cursor: "pointer",
+                        background: isSelected ? "#000080" : "transparent",
+                        color: isSelected ? "#fff" : "inherit",
+                      }}
+                    >
+                      <td style={{ padding: "3px 6px", width: 20 }}>
+                        <input
+                          type="radio"
+                          name="vault"
+                          checked={isSelected}
+                          onChange={() => setSelectedVault(v)}
+                          style={{ margin: 0 }}
+                        />
+                      </td>
+                      <td style={{ padding: "3px 6px" }}>
+                        {v.protocol}
+                        {v.name && (
+                          <span style={{ opacity: 0.7, marginLeft: 4 }}>
+                            {v.name.length > 25 ? v.name.slice(0, 25) + "..." : v.name}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: "3px 6px", fontWeight: 700 }}>
+                        {fmtApy(v.apy)}
+                      </td>
+                      <td style={{ padding: "3px 6px", opacity: 0.7 }}>
+                        {fmtTvl(v.tvl_usd)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {selectedVault && (
+          <p className="text-xs" style={{ marginTop: 4, opacity: 0.8 }}>
+            Idle funds earn {fmtApy(selectedVault.apy)} via {selectedVault.protocol} on{" "}
+            {selectedVault.asset}. Powered by LI.FI Earn.
+          </p>
+        )}
+      </fieldset>
+
+      {/* Friend search */}
       <div className="field-row-stacked">
         <label htmlFor="friend-search">Add friends (optional)</label>
         <input
@@ -139,12 +267,12 @@ export function NewGroupForm() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="name, ENS, basename, or 0x…"
+          placeholder="name, ENS, basename, or 0x..."
           disabled={submitting}
         />
       </div>
 
-      {searching && <p className="text-xs">Searching…</p>}
+      {searching && <p className="text-xs">Searching...</p>}
       {results.length > 0 && (
         <div className="sunken-panel" style={{ maxHeight: 140, overflowY: "auto" }}>
           <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
@@ -186,13 +314,9 @@ export function NewGroupForm() {
                 type="button"
                 onClick={() => setPicked((prev) => prev.filter((x) => x.id !== p.id))}
                 aria-label={`Remove ${friendLabel(p)}`}
-                style={{
-                  marginLeft: 4,
-                  padding: "0 4px",
-                  fontSize: 10,
-                }}
+                style={{ marginLeft: 4, padding: "0 4px", fontSize: 10 }}
               >
-                ×
+                x
               </button>
             </span>
           ))}
@@ -211,7 +335,7 @@ export function NewGroupForm() {
       )}
       <div className="flex gap-2">
         <button type="submit" disabled={submitting}>
-          {submitting ? "Creating…" : "Create group"}
+          {submitting ? "Creating..." : "Create group"}
         </button>
         <button type="button" onClick={() => router.back()} disabled={submitting}>
           Cancel

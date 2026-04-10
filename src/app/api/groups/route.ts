@@ -30,6 +30,9 @@ const Body = z.object({
   name: z.string().trim().min(1).max(80),
   // BetPal users.id values for the OTHER members (creator excluded — implicit).
   memberIds: z.array(z.string().uuid()).max(20).default([]),
+  // Vault selected from LI.FI Earn API. Falls back to env default if omitted.
+  vaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
+  vaultChainId: z.number().int().positive().optional(),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -66,12 +69,15 @@ export async function POST(request: Request): Promise<Response> {
     // Step 2: insert placeholder group row to mint an id. We must satisfy the
     // `threshold >= 2` check, so seed with 2; we'll overwrite with the real
     // value in the update below.
+    const vaultAddress = body.vaultAddress ?? env.morphoVaultBase();
+    const vaultChainId = body.vaultChainId ?? 8453;
+
     const { data: groupRow, error: insertErr } = await sb
       .from("groups")
       .insert({
         name: body.name,
-        vault_address: env.morphoVaultBase(),
-        vault_chain_id: 8453,
+        vault_address: vaultAddress,
+        vault_chain_id: vaultChainId,
         threshold: 2,
         status: "pending",
         created_by: me.id,
@@ -127,8 +133,8 @@ export async function POST(request: Request): Promise<Response> {
         id: groupId,
         name: body.name,
         safe_address: safeAddress,
-        vault_address: env.morphoVaultBase(),
-        vault_chain_id: 8453,
+        vault_address: vaultAddress,
+        vault_chain_id: vaultChainId,
         threshold,
         status: "pending",
         member_count: membershipRows.length,
