@@ -110,4 +110,39 @@ describe("isMarketSettleable", () => {
     );
     expect(r.settleable).toBe(true);
   });
+
+  // UMA resolution status checks
+  it("rejects when umaResolutionStatus is 'proposed' (dispute window open)", () => {
+    const r = isMarketSettleable(
+      mkt({ umaResolutionStatus: "proposed" }),
+      NOW_PAST,
+    );
+    expect(r.settleable).toBe(false);
+    expect(r.reason).toMatch(/UMA/);
+  });
+
+  it("allows when umaResolutionStatus is 'resolved'", () => {
+    const r = isMarketSettleable(
+      mkt({ umaResolutionStatus: "resolved" }),
+      NOW_PAST,
+    );
+    expect(r.settleable).toBe(true);
+  });
+
+  it("allows when umaResolutionStatus is absent (older markets)", () => {
+    const r = isMarketSettleable(
+      mkt({ umaResolutionStatus: undefined }),
+      NOW_PAST,
+    );
+    expect(r.settleable).toBe(true);
+  });
+
+  it("rejects when umaResolutionStatus is 'disputed'", () => {
+    const r = isMarketSettleable(
+      mkt({ umaResolutionStatus: "disputed" }),
+      NOW_PAST,
+    );
+    expect(r.settleable).toBe(false);
+    expect(r.reason).toMatch(/UMA.*disputed/);
+  });
 });

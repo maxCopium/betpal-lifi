@@ -25,11 +25,17 @@ export type ResolveResult =
       payouts: { userId: string; amountCents: number }[];
     };
 
+/**
+ * Advisory lock TTL in milliseconds. If a worker set `processing_started_at`
+ * more than this long ago, we consider it stale (crashed) and steal the lock.
+ */
+const LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 export async function resolveBetIfPossible(betId: string): Promise<ResolveResult> {
   const sb = supabaseService();
   const { data: bet, error: betErr } = await sb
     .from("bets")
-    .select("id, group_id, polymarket_market_id, status, join_deadline")
+    .select("id, group_id, polymarket_market_id, status, join_deadline, processing_started_at")
     .eq("id", betId)
     .maybeSingle();
   if (betErr) throw new Error(`bet lookup failed: ${betErr.message}`);
@@ -41,6 +47,23 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   }
   if (new Date(bet.join_deadline as string).getTime() > Date.now()) {
     return { kind: "noop", status: "join deadline not passed" };
+  }
+
+  // Advisory lock: prevent concurrent cron runs from double-processing the
+  // same bet. We set `processing_started_at` to now, but only if it's either
+  // null (nobody working on it) or older than LOCK_TTL_MS (stale/crashed).
+  const now = new Date();
+  const lockCutoff = new Date(now.getTime() - LOCK_TTL_MS).toISOString();
+  const { data: lockResult, error: lockErr } = await sb
+    .from("bets")
+    .update({ processing_started_at: now.toISOString() })
+    .eq("id", betId)
+    .or(`processing_started_at.is.null,processing_started_at.lt.${lockCutoff}`)
+    .select("id");
+  if (lockErr) throw new Error(`lock acquisition failed: ${lockErr.message}`);
+  if (!lockResult || lockResult.length === 0) {
+    // Another worker is actively processing this bet — skip it.
+    return { kind: "noop", status: "locked by another worker" };
   }
 
   const { data: stakeRows, error: stakeErr } = await sb
@@ -59,9 +82,11 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   const settle = isMarketSettleable(market);
 
   if (!settle.settleable) {
-    if (status !== "resolving") {
-      await sb.from("bets").update({ status: "resolving" }).eq("id", betId);
-    }
+    // Release lock and flip to resolving so the next cron tick retries.
+    await sb
+      .from("bets")
+      .update({ status: "resolving", processing_started_at: null })
+      .eq("id", betId);
     return { kind: "resolving", reason: settle.reason ?? "not settleable yet" };
   }
 
@@ -83,6 +108,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     });
   }
 
+  // Flip to settled and release the advisory lock.
   const { error: updErr } = await sb
     .from("bets")
     .update({
@@ -90,6 +116,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
       resolution_outcome: settle.winningOutcome ?? null,
       settled_at: new Date().toISOString(),
       resolution_evidence: { source: "polymarket", market_id: bet.polymarket_market_id },
+      processing_started_at: null,
     })
     .eq("id", betId);
   if (updErr) throw new Error(`bet update failed: ${updErr.message}`);

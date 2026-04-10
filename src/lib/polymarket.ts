@@ -81,7 +81,17 @@ export function isMarketSettleable(
   now: Date = new Date(),
 ): { settleable: boolean; winningOutcome?: string; reason?: string } {
   if (!m.closed) return { settleable: false, reason: "not closed" };
-  // Buffer past closure
+
+  // Require UMA resolution to be complete. The `umaResolutionStatus` field is
+  // absent on open markets and set to "resolved" after the dispute window. If
+  // the field is present but NOT "resolved" (e.g. "proposed"), the market is
+  // still in the UMA dispute window — settling now would risk paying out on a
+  // result that gets overturned.
+  if (m.umaResolutionStatus !== undefined && m.umaResolutionStatus !== "resolved") {
+    return { settleable: false, reason: `UMA status: ${m.umaResolutionStatus}` };
+  }
+
+  // Buffer past closure (heuristic fallback when umaResolutionStatus is absent)
   if (m.endDate) {
     const end = new Date(m.endDate).getTime();
     const bufferMs = 2 * 60 * 60 * 1000;
