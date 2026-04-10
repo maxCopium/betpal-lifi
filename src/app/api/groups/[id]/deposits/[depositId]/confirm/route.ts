@@ -57,9 +57,9 @@ export async function POST(
     });
 
     if (result.status === "DONE") {
-      // Validate amount_cents is present and positive. A null/zero value means
-      // the deposit was created without an amount — we must reject rather than
-      // silently credit 0, which would lose the user's on-chain deposit.
+      // amount_cents is derived from the Composer quote's toAmountMin at quote
+      // time — it's oracle-sourced, not user-supplied. If it's somehow missing,
+      // fail loudly rather than crediting 0.
       const amountCents = Number(tx.amount_cents ?? 0);
       if (amountCents <= 0) {
         throw new HttpError(

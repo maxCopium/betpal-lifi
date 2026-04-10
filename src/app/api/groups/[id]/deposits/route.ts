@@ -34,9 +34,20 @@ const Body = z.object({
   fromChain: z.number().int().positive(),
   fromToken: z.string().min(1),
   fromAmount: z.string().regex(/^\d+$/, "fromAmount must be a base-units integer string"),
-  /** Optional: caller-side dollar value used to track ledger amount. */
-  amountCents: z.number().int().positive().optional(),
 });
+
+/**
+ * Derive ledger cents from Composer's guaranteed minimum output (toAmountMin).
+ * The vault receives USDC (6 decimals): 1 USDC = 1_000_000 base units = 100 cents.
+ * So 1 cent = 10_000 base units.
+ *
+ * We use toAmountMin (post-slippage floor) rather than toAmount (estimate) to
+ * avoid crediting more than the vault actually received.
+ */
+function quoteToAmountCents(toAmountMin: string): number {
+  const raw = BigInt(toAmountMin);
+  return Number(raw / BigInt(10_000));
+}
 
 export async function POST(
   request: Request,
@@ -85,6 +96,12 @@ export async function POST(
       toAddress: group.safe_address as string,
     });
 
+    // Derive cents from the Composer oracle — never trust user-supplied amounts.
+    const amountCents = quoteToAmountCents(quote.estimate.toAmountMin);
+    if (amountCents <= 0) {
+      throw new HttpError(400, "quote toAmountMin too small to credit any cents");
+    }
+
     // Insert pending transactions row. Use a deterministic-enough idempotency
     // key combining quote id + caller — this prevents accidental duplicates if
     // the user clicks "Quote" twice with the same inputs.
@@ -97,7 +114,7 @@ export async function POST(
         group_id: groupId,
         user_id: me.id,
         type: "deposit",
-        amount_cents: body.amountCents ?? null,
+        amount_cents: amountCents,
         source_chain: body.fromChain,
         source_token: body.fromToken,
         dest_chain: Number(group.vault_chain_id),
