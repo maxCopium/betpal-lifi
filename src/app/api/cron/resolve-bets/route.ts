@@ -1,6 +1,8 @@
 import "server-only";
+import { timingSafeEqual } from "node:crypto";
 import { errorResponse, HttpError } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
+import { addBalanceEvent } from "@/lib/ledger";
 import { resolveBetIfPossible, type ResolveResult } from "@/lib/resolveBet";
 import { env } from "@/lib/env";
 
@@ -32,7 +34,10 @@ async function handler(request: Request): Promise<Response> {
     }
     const auth = request.headers.get("authorization") ?? "";
     const provided = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-    if (provided !== expected) {
+    // Constant-time comparison to prevent timing attacks on the cron secret.
+    const a = Buffer.from(provided);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
       throw new HttpError(401, "invalid cron token");
     }
 
@@ -72,12 +77,51 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    // ── Expire abandoned withdrawals ──────────────────────────────────
+    // Withdrawals stuck in `pending` (no tx hash reported) for >24 hours
+    // have their ledger reservation reversed so the user's balance unfreezes.
+    const WITHDRAWAL_EXPIRY_MS = 24 * 60 * 60 * 1000;
+    const expiryCutoff = new Date(Date.now() - WITHDRAWAL_EXPIRY_MS).toISOString();
+    const { data: staleWithdrawals } = await sb
+      .from("transactions")
+      .select("id, group_id, user_id, amount_cents")
+      .eq("type", "withdrawal")
+      .eq("status", "pending")
+      .is("tx_hash", null)
+      .lt("created_at", expiryCutoff)
+      .limit(100);
+
+    let expiredCount = 0;
+    for (const w of staleWithdrawals ?? []) {
+      try {
+        const cents = Number(w.amount_cents ?? 0);
+        if (cents > 0) {
+          await addBalanceEvent({
+            groupId: w.group_id as string,
+            userId: w.user_id as string,
+            deltaCents: cents,
+            reason: "adjustment",
+            idempotencyKey: `withdrawal_expired:${w.id}`,
+          });
+        }
+        await sb
+          .from("transactions")
+          .update({ status: "expired", updated_at: new Date().toISOString() })
+          .eq("id", w.id)
+          .eq("status", "pending"); // guard: only expire if still pending
+        expiredCount++;
+      } catch (e) {
+        console.warn(`cron: expire withdrawal ${w.id} failed:`, (e as Error).message);
+      }
+    }
+
     return Response.json({
       scanned: bets?.length ?? 0,
       settled,
       resolving,
       noop,
       errored,
+      expiredWithdrawals: expiredCount,
       outcomes,
     });
   } catch (e) {

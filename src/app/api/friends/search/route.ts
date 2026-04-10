@@ -38,7 +38,9 @@ export async function GET(request: Request): Promise<Response> {
       return Response.json({ users: data ?? [] });
     }
 
-    const pattern = `%${q}%`;
+    // Escape PostgREST special chars to prevent filter injection via .or().
+    const escaped = q.replace(/[\\%_]/g, "\\$&");
+    const pattern = `%${escaped}%`;
     const { data, error } = await sb
       .from("users")
       .select("id, display_name, ens_name, basename, wallet_address")

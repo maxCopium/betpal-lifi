@@ -153,4 +153,32 @@ describe("isMarketSettleable", () => {
     expect(r.settleable).toBe(false);
     expect(r.reason).toMatch(/UMA.*disputed/);
   });
+
+  // Price validation
+  it("rejects NaN outcome prices", () => {
+    const r = isMarketSettleable(
+      mkt({ outcomePrices: ["foo", "bar"] }),
+      NOW_PAST,
+    );
+    expect(r.settleable).toBe(false);
+    expect(r.reason).toMatch(/invalid/);
+  });
+
+  it("rejects prices outside [0, 1]", () => {
+    const r = isMarketSettleable(
+      mkt({ outcomePrices: ["1.5", "-0.1"] }),
+      NOW_PAST,
+    );
+    expect(r.settleable).toBe(false);
+    expect(r.reason).toMatch(/invalid/);
+  });
+
+  it("rejects ambiguous resolution: two outcomes at max price", () => {
+    const r = isMarketSettleable(
+      mkt({ outcomePrices: ["1", "1"] }),
+      NOW_PAST,
+    );
+    expect(r.settleable).toBe(false);
+    expect(r.reason).toMatch(/ambiguous/);
+  });
 });

@@ -148,8 +148,9 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
             );
             let distributed = 0;
             const shares = winnerPayouts.map((p) => {
+              // Multiply before divide to avoid float precision loss.
               const raw = Math.floor(
-                (p.amountCents / totalPayoutCents) * yieldCents,
+                (p.amountCents * yieldCents) / totalPayoutCents,
               );
               distributed += raw;
               return { userId: p.userId, cents: raw };

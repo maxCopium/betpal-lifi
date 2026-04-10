@@ -57,28 +57,31 @@ export async function POST(
     });
 
     if (result.status === "DONE") {
-      // Idempotent ledger credit. We use the user-supplied amount_cents as the
-      // ledger value because converting on-chain base units → cents requires a
-      // price oracle (Day 3 wiring). It's the same number the user saw on the
-      // confirm dialog, so even if it drifts slightly from the actual vault
-      // delta the hourly reconciliation job will correct it.
+      // Validate amount_cents is present and positive. A null/zero value means
+      // the deposit was created without an amount — we must reject rather than
+      // silently credit 0, which would lose the user's on-chain deposit.
       const amountCents = Number(tx.amount_cents ?? 0);
-      if (amountCents > 0) {
-        await addBalanceEvent({
-          groupId,
-          userId: me.id,
-          deltaCents: amountCents,
-          reason: "deposit",
-          txHash: tx.tx_hash as string,
-          idempotencyKey: `deposit:${tx.tx_hash}`,
-        });
+      if (amountCents <= 0) {
+        throw new HttpError(
+          500,
+          "deposit has no amount_cents — cannot credit ledger (manual reconciliation needed)",
+        );
       }
+
+      await addBalanceEvent({
+        groupId,
+        userId: me.id,
+        deltaCents: amountCents,
+        reason: "deposit",
+        txHash: tx.tx_hash as string,
+        idempotencyKey: `deposit:${tx.tx_hash}`,
+      });
 
       const { error: updErr } = await sb
         .from("transactions")
         .update({
           status: "completed",
-          actual_amount_cents: amountCents || null,
+          actual_amount_cents: amountCents,
           updated_at: new Date().toISOString(),
         })
         .eq("id", depositId);

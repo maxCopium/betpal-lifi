@@ -106,10 +106,20 @@ export function isMarketSettleable(
   if (!outcomes || !prices || outcomes.length !== prices.length) {
     return { settleable: false, reason: "missing outcome data" };
   }
-  const maxIdx = prices.indexOf(Math.max(...prices));
-  if (prices[maxIdx] < 0.99) {
+  // Validate all prices are finite numbers in [0, 1].
+  if (prices.some((p) => !Number.isFinite(p) || p < 0 || p > 1)) {
+    return { settleable: false, reason: "invalid outcome prices" };
+  }
+  const maxPrice = Math.max(...prices);
+  if (maxPrice < 0.99) {
     return { settleable: false, reason: "no decisive outcome price" };
   }
+  // Reject ambiguous resolution: multiple outcomes at the max price.
+  const winnersAtMax = prices.filter((p) => p === maxPrice);
+  if (winnersAtMax.length > 1) {
+    return { settleable: false, reason: "ambiguous: multiple outcomes share max price" };
+  }
+  const maxIdx = prices.indexOf(maxPrice);
   return { settleable: true, winningOutcome: outcomes[maxIdx] };
 }
 

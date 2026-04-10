@@ -73,16 +73,21 @@ export async function POST(
 
     if (result.status === "FAILED") {
       // Reverse the at-quote-time reservation so the user's balance unfreezes.
+      // amount_cents must be present — the withdrawal route always sets it.
       const amountCents = Number(tx.amount_cents ?? 0);
-      if (amountCents > 0) {
-        await addBalanceEvent({
-          groupId,
-          userId: me.id,
-          deltaCents: amountCents,
-          reason: "adjustment",
-          idempotencyKey: `withdrawal_reverse:${withdrawalId}`,
-        });
+      if (amountCents <= 0) {
+        throw new HttpError(
+          500,
+          "withdrawal has no amount_cents — cannot reverse reservation (manual reconciliation needed)",
+        );
       }
+      await addBalanceEvent({
+        groupId,
+        userId: me.id,
+        deltaCents: amountCents,
+        reason: "adjustment",
+        idempotencyKey: `withdrawal_reverse:${withdrawalId}`,
+      });
       const { error: updErr } = await sb
         .from("transactions")
         .update({
