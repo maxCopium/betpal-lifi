@@ -34,19 +34,80 @@ body {
   overflow-x: hidden;
 }
 
-/* Desktop: roomy padding, windows centered. Mobile: edge-to-edge. */
+/* Desktop: sidebar + content, Explorer layout. */
 .betpal-desktop {
   min-height: 100vh;
-  padding: 24px 16px 56px 16px; /* bottom space for taskbar */
+  padding: 8px 16px 56px 16px; /* bottom space for taskbar */
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.betpal-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 56px);
+  overflow: hidden;
+}
+
+.betpal-sidebar .window {
+  display: flex;
+  flex-direction: column;
+}
+
+.betpal-sidebar .window-body {
+  flex: 1;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+}
+
+.betpal-content {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
 }
 
+/* Nav links in sidebar — remove default link styling. */
+.betpal-nav-link {
+  color: #000;
+  text-decoration: none;
+}
+
+.betpal-nav-link:hover {
+  text-decoration: underline;
+}
+
+/* Tree view collapsed state — hide nested ul. */
+.tree-view li.collapsed > ul {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .betpal-desktop {
     padding: 8px 6px 56px 6px;
+    gap: 8px;
+    flex-direction: column;
+  }
+
+  .betpal-sidebar {
+    width: 100%;
+    position: static;
+    max-height: none;
+  }
+
+  .betpal-sidebar .window-body {
+    max-height: 200px;
+  }
+
+  .betpal-content {
     gap: 8px;
   }
 }
