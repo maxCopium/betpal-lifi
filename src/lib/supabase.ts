@@ -11,7 +11,7 @@ let _service: SupabaseClient | null = null;
  */
 export function supabaseService(): SupabaseClient {
   if (_service) return _service;
-  _service = createClient(env.supabaseUrl(), env.supabaseServiceRoleKey(), {
+  _service = createClient(env.supabaseUrl(), env.supabaseSecretKey(), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return _service;

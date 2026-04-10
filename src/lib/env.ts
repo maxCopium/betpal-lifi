@@ -19,10 +19,10 @@ export const env = {
   privyAppId: () => required("NEXT_PUBLIC_PRIVY_APP_ID"),
   privyAppSecret: () => required("PRIVY_APP_SECRET"),
 
-  // Supabase
+  // Supabase (new API gateway keys)
   supabaseUrl: () => required("NEXT_PUBLIC_SUPABASE_URL"),
-  supabaseAnonKey: () => required("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
-  supabaseServiceRoleKey: () => required("SUPABASE_SERVICE_ROLE_KEY"),
+  supabasePublishableKey: () => required("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+  supabaseSecretKey: () => required("SUPABASE_SECRET_KEY"),
 
   // LI.FI
   lifiApiKey: () => required("LIFI_API_KEY"),

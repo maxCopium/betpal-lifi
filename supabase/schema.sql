@@ -163,7 +163,7 @@ create table if not exists transactions (
   tx_hash             text,
   status              text not null default 'pending'
                         check (status in
-                          ('pending','executing','completed','failed','reverted')),
+                          ('pending','executing','completed','failed','reverted','expired')),
   error_message       text,
   idempotency_key     text not null unique,
   created_at          timestamptz not null default now(),
