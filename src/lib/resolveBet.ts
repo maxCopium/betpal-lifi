@@ -1,8 +1,9 @@
 import "server-only";
 import { supabaseService } from "./supabase";
-import { addBalanceEvent } from "./ledger";
+import { addBalanceEvent, getGroupTotalCents } from "./ledger";
 import { computePayouts, type Stake } from "./payouts";
 import { getMarket, isMarketSettleable } from "./polymarket";
+import { getVaultBalanceCents } from "./vault";
 
 /**
  * Core bet-resolution logic, shared by the user-triggered resolve route and
@@ -23,6 +24,7 @@ export type ResolveResult =
       refunded: boolean;
       reason: string | null;
       payouts: { userId: string; amountCents: number }[];
+      yieldCredited: number; // total yield cents distributed to winners
     };
 
 /**
@@ -108,6 +110,79 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     });
   }
 
+  // ── Yield distribution to winners ──────────────────────────────────────
+  // The group vault accrues yield while funds sit in Morpho. On settlement
+  // we read the on-chain balance, compare it to the ledger, and distribute
+  // any positive drift (= accrued yield) to winners proportionally to their
+  // payout share. This is idempotent via `yield_credit:<betId>:<userId>`.
+  //
+  // If the vault read fails (Safe not deployed, RPC down), we skip yield
+  // distribution silently — payouts are still correct, yield just stays
+  // uncredited until the next reconciliation or resolution.
+  let yieldCredited = 0;
+  const winnerPayouts = result.payouts.filter((p) => p.amountCents > 0);
+  if (winnerPayouts.length > 0 && !result.refunded) {
+    try {
+      const groupId = bet.group_id as string;
+      const { data: group } = await sb
+        .from("groups")
+        .select("safe_address, vault_address")
+        .eq("id", groupId)
+        .single();
+
+      if (group?.safe_address && group?.vault_address) {
+        const onChainCents = await getVaultBalanceCents(
+          group.vault_address as `0x${string}`,
+          group.safe_address as `0x${string}`,
+        );
+        if (onChainCents !== null) {
+          const ledgerCents = await getGroupTotalCents(groupId);
+          const yieldCents = Math.max(0, onChainCents - ledgerCents);
+
+          if (yieldCents > 0) {
+            // Distribute proportionally to winners using integer math (same
+            // largest-remainder approach as payout distribution).
+            const totalPayoutCents = winnerPayouts.reduce(
+              (a, p) => a + p.amountCents,
+              0,
+            );
+            let distributed = 0;
+            const shares = winnerPayouts.map((p) => {
+              const raw = Math.floor(
+                (p.amountCents / totalPayoutCents) * yieldCents,
+              );
+              distributed += raw;
+              return { userId: p.userId, cents: raw };
+            });
+            // Give remainder to the largest winner (deterministic).
+            let remainder = yieldCents - distributed;
+            if (remainder > 0) {
+              shares.sort((a, b) => b.cents - a.cents);
+              shares[0].cents += remainder;
+              remainder = 0;
+            }
+
+            for (const s of shares) {
+              if (s.cents <= 0) continue;
+              await addBalanceEvent({
+                groupId,
+                userId: s.userId,
+                deltaCents: s.cents,
+                reason: "yield_credit",
+                betId,
+                idempotencyKey: `yield_credit:${betId}:${s.userId}`,
+              });
+              yieldCredited += s.cents;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Yield distribution is best-effort — don't block settlement.
+      console.warn("yield distribution failed:", (e as Error).message);
+    }
+  }
+
   // Flip to settled and release the advisory lock.
   const { error: updErr } = await sb
     .from("bets")
@@ -127,5 +202,6 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     refunded: result.refunded,
     reason: result.reason ?? null,
     payouts: result.payouts,
+    yieldCredited,
   };
 }

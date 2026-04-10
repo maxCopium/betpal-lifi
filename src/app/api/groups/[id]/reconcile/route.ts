@@ -1,44 +1,20 @@
 import "server-only";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
-import { basePublicClient } from "@/lib/viem";
 import { getGroupTotalCents } from "@/lib/ledger";
+import { getVaultBalanceCents } from "@/lib/vault";
 
 /**
  * GET /api/groups/[id]/reconcile
  *
  * Compare the off-chain ledger sum to the on-chain Morpho vault balance for
- * the group's Safe. Returns both numbers + the drift in cents. The hourly
- * reconciliation worker (Day 5) calls the same code path.
+ * the group's Safe. Returns both numbers + the drift in cents.
  *
- * For now this is read-only — it does NOT auto-correct the ledger. Drift
- * detection is the first step; auto-correction (writing a `reconciliation`
- * event) is intentionally manual until we trust the read path under load.
- *
- * Vault balance is read via ERC-4626's `convertToAssets(balanceOf(safe))`,
- * which translates the Safe's vault-share holding into the underlying USDC
- * value. USDC has 6 decimals, so cents = floor(usdcUnits / 10000).
+ * Read-only — does NOT auto-correct the ledger. Drift detection is the first
+ * step; auto-correction is intentionally manual until we trust the read path.
  *
  * Per Next 16 conventions, `params` is a Promise and must be awaited.
  */
-
-const ERC4626_ABI = [
-  {
-    type: "function",
-    name: "balanceOf",
-    stateMutability: "view",
-    inputs: [{ type: "address", name: "owner" }],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "convertToAssets",
-    stateMutability: "view",
-    inputs: [{ type: "uint256", name: "shares" }],
-    outputs: [{ type: "uint256" }],
-  },
-] as const;
-
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -66,38 +42,18 @@ export async function GET(
     if (!group.safe_address) throw new HttpError(409, "group has no safe yet");
 
     const ledgerCents = await getGroupTotalCents(groupId);
-
-    const client = basePublicClient();
-    let onChainCents = 0;
-    let onChainAvailable = false;
-    try {
-      const shares = (await client.readContract({
-        address: group.vault_address as `0x${string}`,
-        abi: ERC4626_ABI,
-        functionName: "balanceOf",
-        args: [group.safe_address as `0x${string}`],
-      })) as bigint;
-      const assets = (await client.readContract({
-        address: group.vault_address as `0x${string}`,
-        abi: ERC4626_ABI,
-        functionName: "convertToAssets",
-        args: [shares],
-      })) as bigint;
-      // USDC has 6 decimals → 1 cent = 10_000 base units.
-      onChainCents = Number(assets / BigInt(10000));
-      onChainAvailable = true;
-    } catch (e) {
-      // The Safe may not be deployed yet; or the vault address may be wrong.
-      // Either way, return ledger-only with a note rather than 500-ing.
-      console.warn("vault read failed:", (e as Error).message);
-    }
+    const onChainCents = await getVaultBalanceCents(
+      group.vault_address as `0x${string}`,
+      group.safe_address as `0x${string}`,
+    );
+    const onChainAvailable = onChainCents !== null;
 
     return Response.json({
       group_id: groupId,
       safe_address: group.safe_address,
       vault_address: group.vault_address,
       ledger_cents: ledgerCents,
-      onchain_cents: onChainAvailable ? onChainCents : null,
+      onchain_cents: onChainCents,
       drift_cents: onChainAvailable ? onChainCents - ledgerCents : null,
       onchain_available: onChainAvailable,
     });

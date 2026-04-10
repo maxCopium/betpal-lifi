@@ -61,6 +61,7 @@ export async function POST(
         refunded: result.refunded,
         reason: result.reason,
         payouts: result.payouts,
+        yield_credited_cents: result.yieldCredited,
       },
       { status: 200 },
     );
