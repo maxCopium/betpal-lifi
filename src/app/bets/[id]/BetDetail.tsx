@@ -34,6 +34,7 @@ type Bet = {
 type Stake = {
   id: string;
   user_id: string;
+  user_label?: string;
   outcome_chosen: string;
   amount_cents: number;
   created_at: string;
@@ -97,14 +98,21 @@ export function BetDetail({ betId }: { betId: string }) {
   const { bet, stakes, my_stake } = data;
   const joinPassed = new Date(bet.join_deadline).getTime() <= Date.now();
 
-  // Per-outcome aggregates.
-  const buckets = new Map<string, { count: number; cents: number }>();
-  for (const o of bet.options) buckets.set(o, { count: 0, cents: 0 });
+  // Per-outcome aggregates with the list of stakers (for the pool display).
+  const buckets = new Map<
+    string,
+    { count: number; cents: number; stakers: { label: string; cents: number }[] }
+  >();
+  for (const o of bet.options) buckets.set(o, { count: 0, cents: 0, stakers: [] });
   for (const s of stakes) {
     const b = buckets.get(s.outcome_chosen);
     if (b) {
       b.count += 1;
       b.cents += Number(s.amount_cents);
+      b.stakers.push({
+        label: s.user_label ?? "user",
+        cents: Number(s.amount_cents),
+      });
     }
   }
   const totalCents = stakes.reduce((a, s) => a + Number(s.amount_cents), 0);
@@ -167,7 +175,18 @@ export function BetDetail({ betId }: { betId: string }) {
           const b = buckets.get(o)!;
           return (
             <li key={o}>
-              {o}: {b.count} stakers · {fmtCents(b.cents)}
+              <div>
+                {o}: {b.count} stakers · {fmtCents(b.cents)}
+              </div>
+              {b.stakers.length > 0 && (
+                <ul style={{ margin: 0, paddingLeft: 16 }}>
+                  {b.stakers.map((s, i) => (
+                    <li key={i}>
+                      {s.label} · {fmtCents(s.cents)}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           );
         })}

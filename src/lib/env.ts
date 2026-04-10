@@ -37,6 +37,9 @@ export const env = {
 
   // Vault
   morphoVaultBase: () => required("MORPHO_USDC_VAULT_BASE"),
+
+  // Cron
+  cronSecret: () => optional("CRON_SECRET"),
 };
 
 // Public env vars live in `./publicEnv.ts` so they can be imported from client

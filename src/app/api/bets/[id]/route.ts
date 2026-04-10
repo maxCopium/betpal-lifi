@@ -39,15 +39,42 @@ export async function GET(
     if (memErr) throw new HttpError(500, `member check failed: ${memErr.message}`);
     if (!membership) throw new HttpError(403, "not a member of this bet's group");
 
-    const { data: stakes, error: stakeErr } = await sb
+    const { data: stakeRows, error: stakeErr } = await sb
       .from("stakes")
       .select("id, user_id, outcome_chosen, amount_cents, created_at")
       .eq("bet_id", betId);
     if (stakeErr) throw new HttpError(500, `stake list failed: ${stakeErr.message}`);
 
-    const myStake = (stakes ?? []).find((s) => s.user_id === me.id) ?? null;
+    // Decorate stakes with the staker's display label so the UI can show
+    // "alice · 5.00 USD" rather than a raw uuid. We resolve in one batched
+    // query to avoid N+1 fetches.
+    const userIds = Array.from(new Set((stakeRows ?? []).map((s) => s.user_id as string)));
+    const labels = new Map<string, string>();
+    if (userIds.length > 0) {
+      const { data: userRows, error: userErr } = await sb
+        .from("users")
+        .select("id, display_name, ens_name, basename, wallet_address")
+        .in("id", userIds);
+      if (userErr) throw new HttpError(500, `user lookup failed: ${userErr.message}`);
+      for (const u of userRows ?? []) {
+        const wallet = (u.wallet_address as string | null) ?? "";
+        const short = wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "user";
+        const label =
+          (u.display_name as string | null) ??
+          (u.ens_name as string | null) ??
+          (u.basename as string | null) ??
+          short;
+        labels.set(u.id as string, label);
+      }
+    }
+    const stakes = (stakeRows ?? []).map((s) => ({
+      ...s,
+      user_label: labels.get(s.user_id as string) ?? "user",
+    }));
 
-    return Response.json({ bet, stakes: stakes ?? [], my_stake: myStake });
+    const myStake = stakes.find((s) => s.user_id === me.id) ?? null;
+
+    return Response.json({ bet, stakes, my_stake: myStake });
   } catch (e) {
     return errorResponse(e);
   }

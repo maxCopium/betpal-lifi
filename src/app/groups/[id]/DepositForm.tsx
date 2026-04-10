@@ -18,6 +18,7 @@ import { useState } from "react";
 import { useWallets } from "@privy-io/react-auth";
 import { CopyProgressDialog } from "@/components/win98/CopyProgressDialog";
 import { authedFetch } from "@/lib/clientFetch";
+import { toBaseUnits } from "@/lib/amounts";
 
 type SourceChoice = {
   label: string;
@@ -58,15 +59,6 @@ type QuoteResponse = {
     estimate: { toAmount: string; toAmountMin: string; executionDuration?: number };
   };
 };
-
-function toBaseUnits(amountStr: string, decimals: number): string {
-  const trimmed = amountStr.trim();
-  if (!/^\d+(\.\d+)?$/.test(trimmed)) throw new Error("invalid amount");
-  const [whole, frac = ""] = trimmed.split(".");
-  const padded = (frac + "0".repeat(decimals)).slice(0, decimals);
-  const combined = `${whole}${padded}`.replace(/^0+(?=\d)/, "");
-  return combined === "" ? "0" : combined;
-}
 
 export function DepositForm({ groupId }: { groupId: string }) {
   const { wallets } = useWallets();

@@ -16,6 +16,7 @@
  */
 import { useState } from "react";
 import { authedFetch } from "@/lib/clientFetch";
+import { toBaseUnits } from "@/lib/amounts";
 
 type DestChoice = {
   label: string;
@@ -47,15 +48,6 @@ type WithdrawalResponse = {
   };
 };
 
-function toBaseUnits(amountStr: string, decimals: number): string {
-  const trimmed = amountStr.trim();
-  if (!/^\d+(\.\d+)?$/.test(trimmed)) throw new Error("invalid amount");
-  const [whole, frac = ""] = trimmed.split(".");
-  const padded = (frac + "0".repeat(decimals)).slice(0, decimals);
-  const combined = `${whole}${padded}`.replace(/^0+(?=\d)/, "");
-  return combined === "" ? "0" : combined;
-}
-
 export function WithdrawForm({
   groupId,
   safeAddress,
@@ -70,6 +62,59 @@ export function WithdrawForm({
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<WithdrawalResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [txHashInput, setTxHashInput] = useState("");
+  const [confirmStatus, setConfirmStatus] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  async function onConfirmTxHash(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!result) return;
+    const trimmed = txHashInput.trim();
+    if (!/^0x[0-9a-fA-F]+$/.test(trimmed)) {
+      setError("tx hash must be 0x-hex");
+      return;
+    }
+    setConfirming(true);
+    setConfirmStatus("Reporting tx hash to BetPal…");
+    try {
+      await authedFetch(
+        `/api/groups/${groupId}/withdrawals/${result.withdrawalId}`,
+        { method: "PATCH", body: JSON.stringify({ txHash: trimmed }) },
+      );
+
+      // Poll confirm up to 5 minutes — Safe execution + Composer bridge can be
+      // slow, especially across chains.
+      const start = Date.now();
+      const timeoutMs = 5 * 60 * 1000;
+      while (true) {
+        const r = await authedFetch<{ status: string }>(
+          `/api/groups/${groupId}/withdrawals/${result.withdrawalId}/confirm`,
+          { method: "POST" },
+        );
+        if (r.status === "completed") {
+          setConfirmStatus("Withdrawal completed.");
+          onWithdrawn();
+          break;
+        }
+        if (r.status === "failed" || r.status === "reverted") {
+          // The confirm endpoint already reversed the reservation; refresh.
+          onWithdrawn();
+          throw new Error(`withdrawal ${r.status}`);
+        }
+        if (Date.now() - start >= timeoutMs) {
+          throw new Error("withdrawal timed out — check the dashboard later");
+        }
+        setConfirmStatus("Bridging via LI.FI Composer…");
+        await new Promise((res) => setTimeout(res, 4000));
+      }
+    } catch (err) {
+      setError((err as Error).message);
+      setConfirmStatus(null);
+    } finally {
+      setConfirming(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -150,7 +195,7 @@ export function WithdrawForm({
         </button>
       </div>
       {result && (
-        <div className="text-xs flex flex-col gap-1">
+        <div className="text-xs flex flex-col gap-2">
           <span>
             <strong>Route ready.</strong> Quote id: {result.quote.id.slice(0, 12)}…
           </span>
@@ -167,6 +212,27 @@ export function WithdrawForm({
               </a>
             </span>
           )}
+          <div className="field-row-stacked">
+            <label htmlFor="wd-txhash">Safe execution tx hash (after co-sign)</label>
+            <input
+              id="wd-txhash"
+              type="text"
+              placeholder="0x…"
+              value={txHashInput}
+              onChange={(ev) => setTxHashInput(ev.target.value)}
+              disabled={confirming}
+            />
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={onConfirmTxHash}
+              disabled={confirming || !txHashInput.trim()}
+            >
+              {confirming ? "Confirming…" : "Confirm withdrawal"}
+            </button>
+          </div>
+          {confirmStatus && <span>{confirmStatus}</span>}
         </div>
       )}
     </form>
