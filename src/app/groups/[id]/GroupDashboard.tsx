@@ -11,7 +11,6 @@ import { useCallback, useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
 import { DraggableWindow } from "@/components/win98/DraggableWindow";
-import { WalletWindow } from "@/components/win98/WalletWindow";
 import { DepositForm } from "./DepositForm";
 import { WithdrawForm } from "./WithdrawForm";
 import { NewBetDialog } from "./NewBetDialog";
@@ -153,9 +152,6 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
 
   return (
     <>
-      {/* ── Wallet Window ── */}
-      <WalletWindow />
-
       {/* ── Group Info Window ── */}
       <DraggableWindow id="group-info" title={group.name}>
         <div className="flex flex-col gap-3">
