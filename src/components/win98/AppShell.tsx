@@ -9,13 +9,17 @@
 import type { ReactNode } from "react";
 import { Taskbar } from "./Taskbar";
 import { Sidebar } from "./Sidebar";
+import { SidebarWallet } from "./SidebarWallet";
 import { WindowManagerProvider } from "./WindowManager";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <WindowManagerProvider>
       <div className="betpal-desktop">
-        <Sidebar />
+        <div className="betpal-left-column">
+          <Sidebar />
+          <SidebarWallet />
+        </div>
         <div className="betpal-content">{children}</div>
       </div>
       <Taskbar />

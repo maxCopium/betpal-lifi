@@ -141,14 +141,23 @@ th, td {
   margin: 0 auto;
 }
 
-/* ─── SIDEBAR ─── */
+/* ─── LEFT COLUMN (sidebar + wallet) ─── */
 
-.betpal-sidebar {
+.betpal-left-column {
   width: 240px;
   flex-shrink: 0;
   position: sticky;
   top: 8px;
   max-height: calc(100vh - 56px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--betpal-space-sm);
+  overflow: hidden;
+}
+
+.betpal-sidebar {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -186,6 +195,17 @@ th, td {
 .betpal-sidebar .tree-view a:active,
 .betpal-sidebar .tree-view summary:active {
   background: var(--betpal-color-active-bg);
+}
+
+/* ─── SIDEBAR WALLET ─── */
+
+.betpal-sidebar-wallet {
+  flex-shrink: 0;
+}
+
+.betpal-sidebar-wallet .window {
+  display: flex;
+  flex-direction: column;
 }
 
 /* ─── CONTENT ─── */
@@ -228,6 +248,13 @@ th, td {
   .betpal-desktop {
     padding: var(--betpal-space-sm) var(--betpal-space-sm) 56px var(--betpal-space-sm);
     gap: var(--betpal-space-sm);
+    flex-direction: column;
+  }
+
+  .betpal-left-column {
+    width: 100%;
+    position: static;
+    max-height: none;
     flex-direction: column;
   }
 
