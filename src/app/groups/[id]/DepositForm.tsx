@@ -9,22 +9,10 @@ import { useState } from "react";
 import { useWallets } from "@privy-io/react-auth";
 import { CopyProgressDialog } from "@/components/win98/CopyProgressDialog";
 import { useDepositFlow } from "@/hooks/useDepositFlow";
-import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { useDepositSources } from "@/hooks/useDepositSources";
-
-/** Trim to max N decimal places, strip trailing zeros */
-function trimDecimals(val: string, max: number): string {
-  const num = Number(val);
-  if (isNaN(num)) return val;
-  return num.toLocaleString("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: max,
-  });
-}
 
 export function DepositForm({ groupId }: { groupId: string }) {
   const { wallets } = useWallets();
-  const { balances, loading: balLoading, refresh: refreshBalance } = useWalletBalances();
   const { sources, loading: sourcesLoading } = useDepositSources();
   const [sourceIdx, setSourceIdx] = useState(0);
   const [amount, setAmount] = useState("10");
@@ -110,7 +98,7 @@ export function DepositForm({ groupId }: { groupId: string }) {
             {fundingStep === "pending" ? "Open wallet again" : "Add funds"}
           </button>
           {fundingStep === "pending" && (
-            <button type="button" onClick={() => { setFundingStep("done"); refreshBalance(); }}>
+            <button type="button" onClick={() => setFundingStep("done")}>
               Done
             </button>
           )}
@@ -131,95 +119,6 @@ export function DepositForm({ groupId }: { groupId: string }) {
           </p>
         )}
       </form>
-
-      {/* ── Wallet balances ── */}
-      <div className="window" style={{ marginTop: 8 }}>
-        <div className="title-bar" style={{ padding: "2px 4px" }}>
-          <div className="title-bar-text" style={{ fontSize: 11 }}>
-            Available funds
-          </div>
-          <div className="title-bar-controls">
-            <button
-              aria-label="Refresh"
-              disabled={balLoading}
-              onClick={() => refreshBalance()}
-              style={{ fontSize: 10, padding: "0 4px" }}
-            >
-              {balLoading ? "..." : "↻"}
-            </button>
-          </div>
-        </div>
-        <div className="window-body" style={{ padding: 6 }}>
-          {balLoading && balances.length === 0 && (
-            <p className="text-xs" style={{ margin: 0, color: "#666" }}>
-              Loading balances...
-            </p>
-          )}
-          {!balLoading && balances.length === 0 && (
-            <p className="text-xs" style={{ margin: 0, color: "#666" }}>
-              No funds yet.{" "}
-              <button
-                type="button"
-                onClick={openFunding}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#00a",
-                  textDecoration: "underline",
-                  cursor: "pointer",
-                  padding: 0,
-                  fontSize: "inherit",
-                }}
-              >
-                Add funds
-              </button>
-            </p>
-          )}
-          {balances.length > 0 && (
-            <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
-              <tbody>
-                {balances.map((t) => {
-                  const isStable = ["USDC", "USDbC", "DAI", "USDT"].includes(t.symbol);
-                  const formatted = trimDecimals(
-                    t.balanceFormatted,
-                    isStable ? 2 : 6,
-                  );
-                  const usdVal =
-                    t.priceUSD
-                      ? (Number(t.priceUSD) * Number(t.balanceFormatted)).toFixed(2)
-                      : null;
-                  return (
-                    <tr key={t.address} style={{ borderBottom: "1px solid #dfdfdf" }}>
-                      <td style={{ padding: "2px 0", fontWeight: 600 }}>
-                        {t.symbol}
-                      </td>
-                      <td style={{ padding: "2px 4px", textAlign: "right" }}>
-                        {formatted}
-                      </td>
-                      {usdVal && (
-                        <td style={{ padding: "2px 0", textAlign: "right", color: "#666" }}>
-                          ${usdVal}
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 8 }}>
-        <button
-          type="button"
-          className="text-xs"
-          onClick={() => window.open("https://home.privy.io/", "betpal_fund")}
-          style={{ fontSize: 11 }}
-        >
-          Manage wallet
-        </button>
-      </div>
 
       <CopyProgressDialog
         open={flow.open}

@@ -152,6 +152,47 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Draggable windows — positioned relative to flow, moved via transform. */
+.betpal-draggable-window {
+  width: 100%;
+  max-width: var(--betpal-content-max);
+  touch-action: none; /* prevent scroll during drag on mobile */
+}
+
+.betpal-draggable-window .title-bar {
+  cursor: grab;
+}
+
+.betpal-draggable-window .title-bar:active {
+  cursor: grabbing;
+}
+
+/* Taskbar window buttons */
+.betpal-taskbar-windows {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.betpal-taskbar-btn {
+  max-width: 160px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.betpal-taskbar-btn--active {
+  box-shadow:
+    inset 1px 1px 0 #808080,
+    inset -1px -1px 0 #ffffff;
+  background: #dfdfdf;
+}
+
 /* Utility for making 98.css fields full-width on mobile. */
 .betpal-stretch input[type="text"],
 .betpal-stretch input[type="email"],
