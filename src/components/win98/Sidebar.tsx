@@ -154,20 +154,20 @@ export function Sidebar() {
                       <li key={g.id} className={isExpanded ? "" : "collapsed"}>
                         <span
                           onClick={() => toggleGroup(g.id)}
-                          style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4 }}
+                          style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}
                         >
-                          <span style={{ fontSize: 10, transition: "transform 0.15s", transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", display: "inline-block" }}>
+                          <span style={{ fontSize: 10, transition: "transform 0.15s", transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", display: "inline-block", flexShrink: 0 }}>
                             ▶
                           </span>
-                          📁{" "}
+                          <span style={{ flexShrink: 0 }}>📁</span>
                           <Link
                             href={`/groups/${g.id}`}
                             className="betpal-nav-link"
-                            style={{ fontWeight: isActiveGroup ? 700 : 400 }}
+                            style={{ fontWeight: isActiveGroup ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                           >
                             {g.name}
                           </Link>
-                          <span className="betpal-status betpal-status--info" style={{ marginLeft: 4 }}>
+                          <span style={{ marginLeft: "auto", opacity: 0.5, fontSize: 11, flexShrink: 0 }}>
                             {g.status}
                           </span>
                         </span>
@@ -183,17 +183,17 @@ export function Sidebar() {
                               groupBets.map((bet) => {
                                 const isActiveBet = activeBetId === bet.id;
                                 return (
-                                  <li key={bet.id}>
+                                  <li key={bet.id} style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0 }}>
                                     <Link
                                       href={`/bets/${bet.id}`}
                                       className="betpal-nav-link"
-                                      style={{ fontWeight: isActiveBet ? 700 : 400 }}
+                                      style={{ fontWeight: isActiveBet ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}
                                     >
-                                      📄 {bet.title.length > 35
-                                        ? bet.title.slice(0, 35) + "…"
+                                      📄 {bet.title.length > 25
+                                        ? bet.title.slice(0, 25) + "…"
                                         : bet.title}
                                     </Link>
-                                    <span className={`betpal-status betpal-status--${bet.status === "settled" ? "success" : bet.status === "voided" ? "error" : "info"}`} style={{ marginLeft: 6 }}>
+                                    <span style={{ opacity: 0.5, fontSize: 11, flexShrink: 0 }}>
                                       {bet.status}
                                     </span>
                                   </li>
