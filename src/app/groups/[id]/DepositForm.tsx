@@ -6,16 +6,36 @@
  * dialog throughout.
  */
 import { useState } from "react";
-import { useWallets } from "@privy-io/react-auth";
+import { useWallets, useFundWallet } from "@privy-io/react-auth";
+import { base } from "viem/chains";
 import { CopyProgressDialog } from "@/components/win98/CopyProgressDialog";
 import { useDepositFlow, SOURCES } from "@/hooks/useDepositFlow";
 
 export function DepositForm({ groupId }: { groupId: string }) {
   const { wallets } = useWallets();
+  const { fundWallet } = useFundWallet();
   const [sourceIdx, setSourceIdx] = useState(0);
   const [amount, setAmount] = useState("10");
   const [localError, setLocalError] = useState<string | null>(null);
   const flow = useDepositFlow();
+
+  async function onFundWallet() {
+    setLocalError(null);
+    const wallet = wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
+    if (!wallet) {
+      setLocalError("no wallet available — sign in first");
+      return;
+    }
+    try {
+      const result = await fundWallet({
+        address: wallet.address,
+        options: { chain: base, amount: "10", asset: "USDC" },
+      });
+      setLocalError("fundWallet result: " + JSON.stringify(result));
+    } catch (err: unknown) {
+      setLocalError("fundWallet error: " + (err instanceof Error ? err.message : String(err)));
+    }
+  }
 
   async function onDeposit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,8 +89,9 @@ export function DepositForm({ groupId }: { groupId: string }) {
             {displayError}
           </p>
         )}
-        <div>
+        <div className="flex gap-2">
           <button type="submit">Deposit</button>
+          <button type="button" onClick={onFundWallet}>Add funds (test)</button>
         </div>
       </form>
       <CopyProgressDialog
