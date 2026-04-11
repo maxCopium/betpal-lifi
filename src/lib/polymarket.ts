@@ -75,7 +75,50 @@ export async function trendingMarkets(limit = 10): Promise<PolymarketMarket[]> {
   return z.array(MarketSchema).parse(arr);
 }
 
+/**
+ * Mock market registry. When a market_id starts with "mock:", we return
+ * synthetic data instead of hitting Polymarket. Used for hackathon demos.
+ * The `mockResolvedOutcome` field is set via the mock-resolve API route.
+ */
+const MOCK_MARKETS: Record<string, { question: string; outcomes: string[] }> = {
+  "mock:eth-5k": {
+    question: "Will ETH hit $5,000 by end of 2026?",
+    outcomes: ["Yes", "No"],
+  },
+  "mock:btc-200k": {
+    question: "Will BTC reach $200,000 in 2026?",
+    outcomes: ["Yes", "No"],
+  },
+  "mock:demo": {
+    question: "Demo bet — resolve with the taskbar button",
+    outcomes: ["Yes", "No"],
+  },
+};
+
+export function isMockMarket(marketId: string): boolean {
+  return marketId.startsWith("mock:");
+}
+
+export function getMockMarketData(marketId: string): PolymarketMarket | null {
+  const mock = MOCK_MARKETS[marketId];
+  if (!mock) return null;
+  return {
+    id: marketId,
+    question: mock.question,
+    outcomes: mock.outcomes,
+    outcomePrices: mock.outcomes.map(() => "0.5"),
+    closed: false,
+    active: true,
+    endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  };
+}
+
 export async function getMarket(marketId: string): Promise<PolymarketMarket> {
+  if (isMockMarket(marketId)) {
+    const mock = getMockMarketData(marketId);
+    if (mock) return mock;
+    throw new Error(`unknown mock market: ${marketId}`);
+  }
   const res = await fetch(`${GAMMA}/markets/${marketId}`, {
     headers: { accept: "application/json" },
     next: { revalidate: 30 },
@@ -101,7 +144,17 @@ export async function getMarket(marketId: string): Promise<PolymarketMarket> {
 export function isMarketSettleable(
   m: PolymarketMarket,
   now: Date = new Date(),
+  /** For mock markets, pass the resolved outcome from the DB. */
+  mockResolvedOutcome?: string | null,
 ): { settleable: boolean; winningOutcome?: string; reason?: string } {
+  // Mock markets resolve when the DB flag is set via /api/bets/[id]/mock-resolve.
+  if (isMockMarket(String(m.id))) {
+    if (!mockResolvedOutcome) {
+      return { settleable: false, reason: "mock market not yet resolved" };
+    }
+    return { settleable: true, winningOutcome: mockResolvedOutcome };
+  }
+
   if (!m.closed) return { settleable: false, reason: "not closed" };
 
   // Require UMA resolution to be complete. The Gamma API returns

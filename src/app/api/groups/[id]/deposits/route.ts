@@ -101,7 +101,7 @@ export async function POST(
       if (existingStake) throw new HttpError(409, "you already have a stake on this bet");
     }
 
-    // Look up the group's safe + vault.
+    // Look up the group's wallet + vault.
     const { data: group, error: groupErr } = await sb
       .from("groups")
       .select("id, safe_address, vault_address, vault_chain_id, status")
@@ -110,10 +110,10 @@ export async function POST(
     if (groupErr || !group) {
       throw new HttpError(500, `group lookup failed: ${groupErr?.message}`);
     }
-    if (!group.safe_address) throw new HttpError(409, "group has no safe address yet");
+    if (!group.safe_address) throw new HttpError(409, "group wallet not initialized yet");
 
-    // Quote: route the user's funds into the vault token, with the Safe as
-    // the recipient.
+    // Quote: route the user's funds into the vault token, with the group
+    // wallet as the beneficiary of vault shares.
     const quote = await getComposerQuote({
       fromChain: body.fromChain,
       toChain: Number(group.vault_chain_id),

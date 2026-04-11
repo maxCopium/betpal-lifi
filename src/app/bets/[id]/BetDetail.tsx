@@ -67,6 +67,8 @@ export function BetDetail({ betId }: { betId: string }) {
   const [mode, setMode] = useState<"deposit" | "balance">("deposit");
   const [submitting, setSubmitting] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [cancelVotes, setCancelVotes] = useState<{ votes: number; total: number } | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const flow = useDepositFlow();
 
   const reload = useCallback(async () => {
@@ -76,6 +78,13 @@ export function BetDetail({ betId }: { betId: string }) {
       if (!outcome && d.bet.options.length > 0) {
         setOutcome(d.bet.options[0]);
       }
+      // Load cancel vote status.
+      try {
+        const cv = await authedFetch<{ votes: number; total: number }>(
+          `/api/bets/${betId}/cancel-vote`,
+        );
+        setCancelVotes(cv);
+      } catch { /* ignore */ }
     } catch (e) {
       setError((e as Error).message);
     }
@@ -166,6 +175,23 @@ export function BetDetail({ betId }: { betId: string }) {
     }
   }
 
+  async function voteCancelBet() {
+    setCancelling(true);
+    setError(null);
+    try {
+      const res = await authedFetch<{ unanimous: boolean; votes: number; total: number }>(
+        `/api/bets/${betId}/cancel-vote`,
+        { method: "POST" },
+      );
+      setCancelVotes({ votes: res.votes, total: res.total });
+      if (res.unanimous) await reload();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   async function tryResolve() {
     setResolving(true);
     setError(null);
@@ -229,6 +255,22 @@ export function BetDetail({ betId }: { betId: string }) {
           <div className="text-xs">
             <strong>Your stake:</strong> {fmtCents(my_stake.amount_cents)} on{" "}
             {my_stake.outcome_chosen}
+          </div>
+        </>
+      )}
+
+      {my_stake && bet.status !== "settled" && bet.status !== "voided" && (
+        <>
+          <hr style={{ margin: "8px 0" }} />
+          <div className="flex items-center gap-2">
+            <button onClick={voteCancelBet} disabled={cancelling}>
+              {cancelling ? "Voting..." : "Vote to cancel bet"}
+            </button>
+            {cancelVotes && (
+              <span className="text-xs">
+                {cancelVotes.votes}/{cancelVotes.total} agreed to cancel
+              </span>
+            )}
           </div>
         </>
       )}

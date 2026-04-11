@@ -14,9 +14,7 @@
   "dependencies": {
     "@privy-io/react-auth": "^3.21.0",
     "@privy-io/server-auth": "^1.32.5",
-    "@safe-global/api-kit": "^4.1.0",
-    "@safe-global/protocol-kit": "^7.0.0",
-    "@supabase/supabase-js": "^2.103.0",
+"@supabase/supabase-js": "^2.103.0",
     "98.css": "^0.1.21",
     "next": "16.2.3",
     "react": "19.2.4",

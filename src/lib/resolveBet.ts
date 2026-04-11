@@ -3,7 +3,7 @@ import { supabaseService } from "./supabase";
 import { addBalanceEvent, getGroupTotalCents } from "./ledger";
 import { computePayouts, type Stake } from "./payouts";
 import { getMarket, isMarketSettleable } from "./polymarket";
-import { getVaultBalanceCents } from "./vault";
+import { getVaultBalanceCents, redeemFromVault } from "./vault";
 
 /**
  * Core bet-resolution logic, shared by the user-triggered resolve route and
@@ -37,7 +37,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   const sb = supabaseService();
   const { data: bet, error: betErr } = await sb
     .from("bets")
-    .select("id, group_id, polymarket_market_id, status, join_deadline, processing_started_at")
+    .select("id, group_id, polymarket_market_id, status, join_deadline, processing_started_at, mock_resolved_outcome")
     .eq("id", betId)
     .maybeSingle();
   if (betErr) throw new Error(`bet lookup failed: ${betErr.message}`);
@@ -47,7 +47,8 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   if (status === "settled" || status === "voided") {
     return { kind: "noop", status };
   }
-  if (new Date(bet.join_deadline as string).getTime() > Date.now()) {
+  const isMock = (bet.polymarket_market_id as string).startsWith("mock:");
+  if (!isMock && new Date(bet.join_deadline as string).getTime() > Date.now()) {
     return { kind: "noop", status: "join deadline not passed" };
   }
 
@@ -81,7 +82,11 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   const totalPoolCents = stakes.reduce((a, s) => a + s.amountCents, 0);
 
   const market = await getMarket(bet.polymarket_market_id as string);
-  const settle = isMarketSettleable(market);
+  const settle = isMarketSettleable(
+    market,
+    new Date(),
+    (bet.mock_resolved_outcome as string | null) ?? undefined,
+  );
 
   if (!settle.settleable) {
     // Release lock and flip to resolving so the next cron tick retries.
@@ -92,6 +97,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     return { kind: "resolving", reason: settle.reason ?? "not settleable yet" };
   }
 
+  const groupId = bet.group_id as string;
   const result = computePayouts({
     stakes,
     winningOutcome: settle.winningOutcome ?? null,
@@ -101,7 +107,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   for (const p of result.payouts) {
     if (p.amountCents <= 0) continue;
     await addBalanceEvent({
-      groupId: bet.group_id as string,
+      groupId,
       userId: p.userId,
       deltaCents: p.amountCents,
       reason: "payout",
@@ -116,14 +122,13 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   // any positive drift (= accrued yield) to winners proportionally to their
   // payout share. This is idempotent via `yield_credit:<betId>:<userId>`.
   //
-  // If the vault read fails (Safe not deployed, RPC down), we skip yield
+  // If the vault read fails (no shares yet, RPC down), we skip yield
   // distribution silently — payouts are still correct, yield just stays
   // uncredited until the next reconciliation or resolution.
   let yieldCredited = 0;
   const winnerPayouts = result.payouts.filter((p) => p.amountCents > 0);
   if (winnerPayouts.length > 0 && !result.refunded) {
     try {
-      const groupId = bet.group_id as string;
       const { data: group } = await sb
         .from("groups")
         .select("safe_address, vault_address")
@@ -181,6 +186,51 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     } catch (e) {
       // Yield distribution is best-effort — don't block settlement.
       console.warn("yield distribution failed:", (e as Error).message);
+    }
+  }
+
+  // ── Auto-payout: redeem from vault + send USDC to winners ─────────────
+  // Best-effort: if on-chain payout fails, the ledger credit still stands
+  // and the winner can manually withdraw later.
+  const allPayouts = result.payouts.filter((p) => p.amountCents > 0);
+  for (const p of allPayouts) {
+    try {
+      // Look up the winner's wallet address.
+      const { data: user } = await sb
+        .from("users")
+        .select("wallet_address")
+        .eq("id", p.userId)
+        .single();
+      if (!user?.wallet_address) continue;
+
+      // Check idempotency: skip if already paid out on-chain.
+      const { data: existing } = await sb
+        .from("balance_events")
+        .select("id")
+        .eq("idempotency_key", `auto_payout:${betId}:${p.userId}`)
+        .maybeSingle();
+      if (existing) continue;
+
+      // Send only the payout amount — yield was already credited as separate
+      // yield_credit ledger events and doesn't need additional on-chain transfer.
+      await redeemFromVault(
+        groupId,
+        p.amountCents,
+        user.wallet_address as `0x${string}`,
+      );
+
+      // Record the on-chain payout in the ledger (negative event to balance
+      // the earlier payout credit — funds left the vault).
+      await addBalanceEvent({
+        groupId,
+        userId: p.userId,
+        deltaCents: -p.amountCents,
+        reason: "adjustment",
+        betId,
+        idempotencyKey: `auto_payout:${betId}:${p.userId}`,
+      });
+    } catch (e) {
+      console.warn(`auto-payout failed for ${p.userId}:`, (e as Error).message);
     }
   }
 

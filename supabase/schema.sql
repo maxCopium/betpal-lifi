@@ -40,7 +40,7 @@ create index if not exists users_basename_trgm
 create table if not exists groups (
   id               uuid primary key default uuid_generate_v4(),
   name             text not null,
-  safe_address     citext,                  -- nullable until counterfactual deploy
+  safe_address     citext,                  -- group custodial wallet address (legacy column name)
   vault_address    citext not null,         -- Morpho USDC on Base for v1
   vault_chain_id   integer not null default 8453,
   threshold        integer not null check (threshold >= 2),
@@ -145,7 +145,7 @@ create index if not exists balance_events_group_user_idx
 create index if not exists balance_events_bet_idx on balance_events(bet_id);
 
 -- =============================================================================
--- TRANSACTIONS  (Composer / Safe operations, two-phase tracked)
+-- TRANSACTIONS  (Composer operations, two-phase tracked)
 -- =============================================================================
 create table if not exists transactions (
   id                  uuid primary key default uuid_generate_v4(),
@@ -200,3 +200,23 @@ create table if not exists invite_links (
 );
 
 create index if not exists invite_links_group_idx on invite_links(group_id);
+
+-- =============================================================================
+-- MIGRATIONS (idempotent additions)
+-- =============================================================================
+
+-- Mock market resolution for demo purposes.
+alter table bets add column if not exists mock_resolved_outcome text;
+
+-- Human-readable question for the bet (duplicated from polymarket for mock bets).
+alter table bets add column if not exists question text;
+
+-- =============================================================================
+-- CANCEL_VOTES (unanimous bet cancellation)
+-- =============================================================================
+create table if not exists cancel_votes (
+  bet_id      uuid not null references bets(id),
+  user_id     uuid not null references users(id),
+  created_at  timestamptz not null default now(),
+  primary key (bet_id, user_id)
+);

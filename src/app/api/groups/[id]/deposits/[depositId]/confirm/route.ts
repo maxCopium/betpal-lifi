@@ -87,8 +87,7 @@ export async function POST(
         .eq("id", depositId);
       if (updErr) throw new HttpError(500, `tx update failed: ${updErr.message}`);
 
-      // Promote group to active on first successful deposit. Membership freezes
-      // from this point — see /api/invites/[token]/accept.
+      // Promote group to active on first successful deposit.
       await sb
         .from("groups")
         .update({ status: "active" })

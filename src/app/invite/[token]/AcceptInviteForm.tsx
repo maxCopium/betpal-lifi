@@ -12,8 +12,6 @@ import { authedFetch } from "@/lib/clientFetch";
 
 type AcceptResponse = {
   group_id: string;
-  safe_address: string;
-  threshold: number;
 };
 
 export function AcceptInviteForm({ token }: { token: string }) {
@@ -53,9 +51,8 @@ export function AcceptInviteForm({ token }: { token: string }) {
     <div className="flex flex-col gap-3">
       <p>You&apos;ve been invited to join a BetPal group.</p>
       <p className="text-xs">
-        Accepting will add you to the group&apos;s shared Safe vault. The group cannot
-        accept new members once anyone deposits funds, so accept while it&apos;s still
-        pending.
+        Accepting will add you to the group&apos;s shared betting pool. Your deposits
+        earn yield in a Morpho vault while bets are open.
       </p>
       {error && (
         <p className="text-xs" role="alert" style={{ color: "#a00" }}>

@@ -21,9 +21,9 @@ import { useVaultInfo } from "@/hooks/useVaultInfo";
 type GroupRow = {
   id: string;
   name: string;
-  safe_address: string | null;
+  safe_address: string | null; // group wallet address (legacy column name)
   vault_address: string;
-  threshold: number;
+  threshold: number; // cosmetic — kept for DB constraint
   status: string;
   created_at: string;
 };
@@ -160,7 +160,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
       <DraggableWindow id="group-info" title={group.name}>
         <div className="flex flex-col gap-2 text-sm" style={{ padding: 4 }}>
           <div><strong>Status:</strong> {group.status}</div>
-          <div><strong>Threshold:</strong> {group.threshold} signers</div>
+          <div><strong>Members:</strong> {group.threshold}</div>
 
           {/* Vault yield info */}
           {vaultInfo && vaultInfo.apy && (
@@ -204,7 +204,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
               On-chain:{" "}
               {reconcile.onchain_available && reconcile.onchain_cents !== null
                 ? fmtCents(reconcile.onchain_cents)
-                : "(Safe not deployed)"}
+                : "(vault not initialized)"}
               {reconcile.drift_cents !== null && (
                 <>
                   {" · drift "}
@@ -246,7 +246,6 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
         <div style={{ padding: 4 }}>
           <WithdrawForm
             groupId={groupId}
-            safeAddress={group.safe_address}
             onWithdrawn={loadBalance}
           />
         </div>

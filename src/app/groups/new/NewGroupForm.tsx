@@ -16,8 +16,7 @@ import { authedFetch } from "@/lib/clientFetch";
 type CreatedGroup = {
   id: string;
   name: string;
-  safe_address: `0x${string}`;
-  threshold: number;
+  safe_address: `0x${string}`; // group wallet address (legacy column name)
   status: string;
 };
 

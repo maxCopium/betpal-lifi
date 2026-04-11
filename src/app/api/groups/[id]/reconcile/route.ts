@@ -8,7 +8,7 @@ import { getVaultBalanceCents } from "@/lib/vault";
  * GET /api/groups/[id]/reconcile
  *
  * Compare the off-chain ledger sum to the on-chain Morpho vault balance for
- * the group's Safe. Returns both numbers + the drift in cents.
+ * the group's custodial wallet. Returns both numbers + the drift in cents.
  *
  * Read-only — does NOT auto-correct the ledger. Drift detection is the first
  * step; auto-correction is intentionally manual until we trust the read path.
@@ -39,7 +39,7 @@ export async function GET(
       .eq("id", groupId)
       .single();
     if (groupErr || !group) throw new HttpError(500, `group lookup failed: ${groupErr?.message}`);
-    if (!group.safe_address) throw new HttpError(409, "group has no safe yet");
+    if (!group.safe_address) throw new HttpError(409, "group wallet not initialized yet");
 
     const ledgerCents = await getGroupTotalCents(groupId);
     const onChainCents = await getVaultBalanceCents(
@@ -50,7 +50,7 @@ export async function GET(
 
     return Response.json({
       group_id: groupId,
-      safe_address: group.safe_address,
+      wallet_address: group.safe_address,
       vault_address: group.vault_address,
       ledger_cents: ledgerCents,
       onchain_cents: onChainCents,

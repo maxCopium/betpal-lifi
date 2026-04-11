@@ -3,7 +3,7 @@ import { z } from "zod";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { env } from "@/lib/env";
-import { buildSafeConfig, predictGroupSafeAddress } from "@/lib/safe";
+import { deriveGroupWallet } from "@/lib/groupWallet";
 
 /**
  * POST /api/groups
@@ -13,16 +13,15 @@ import { buildSafeConfig, predictGroupSafeAddress } from "@/lib/safe";
  *
  * Flow:
  *   1. Authenticate caller (requireUser).
- *   2. Insert a placeholder `groups` row to mint a UUID — the saltNonce
- *      depends on `groups.id`, so we need it first.
+ *   2. Insert a placeholder `groups` row to mint a UUID.
  *   3. Resolve member wallet addresses from `users` table.
- *   4. buildSafeConfig → predictGroupSafeAddress (counterfactual; no tx).
- *   5. Update the row with `safe_address` + final `threshold`.
+ *   4. Derive a per-group custodial wallet (deterministic from groupId).
+ *   5. Update the row with the derived wallet address.
  *   6. Insert `group_members` rows (creator = owner, others = member).
  *
  * Notes:
- *   - We never deploy the Safe here. That happens lazily on first state-
- *     changing tx (e.g. first deposit's Composer route).
+ *   - Each group gets an isolated custodial wallet derived from the
+ *     resolver key + groupId. The app signs all on-chain txs.
  *   - vault_address comes from env (Morpho USDC on Base for v1).
  */
 
@@ -61,11 +60,6 @@ export async function POST(request: Request): Promise<Response> {
       otherMembers = data as { id: string; wallet_address: string }[];
     }
 
-    const memberAddresses = [
-      me.walletAddress,
-      ...otherMembers.map((m) => m.wallet_address),
-    ] as `0x${string}`[];
-
     // Step 2: insert placeholder group row to mint an id. We must satisfy the
     // `threshold >= 2` check, so seed with 2; we'll overwrite with the real
     // value in the update below.
@@ -89,24 +83,13 @@ export async function POST(request: Request): Promise<Response> {
     }
     const groupId = groupRow.id as string;
 
-    // Step 4: build the Safe config + predict counterfactual address.
-    let safeAddress: `0x${string}`;
-    let threshold: number;
-    try {
-      const cfg = buildSafeConfig({ groupId, memberAddresses });
-      threshold = cfg.threshold;
-      safeAddress = await predictGroupSafeAddress(cfg);
-    } catch (e) {
-      // Roll back the placeholder row so we don't litter the table with
-      // half-formed groups on failure.
-      await sb.from("groups").delete().eq("id", groupId);
-      throw new HttpError(500, `safe config failed: ${(e as Error).message}`);
-    }
+    // Step 4: derive the per-group custodial wallet address.
+    const { address: walletAddress } = deriveGroupWallet(groupId);
 
-    // Step 5: write the real safe_address + threshold.
+    // Step 5: write the derived wallet address (stored in safe_address column).
     const { error: updateErr } = await sb
       .from("groups")
-      .update({ safe_address: safeAddress, threshold })
+      .update({ safe_address: walletAddress, threshold: 2 })
       .eq("id", groupId);
     if (updateErr) {
       await sb.from("groups").delete().eq("id", groupId);
@@ -132,10 +115,11 @@ export async function POST(request: Request): Promise<Response> {
       {
         id: groupId,
         name: body.name,
-        safe_address: safeAddress,
+        safe_address: walletAddress, // legacy key name
+        wallet_address: walletAddress,
         vault_address: vaultAddress,
         vault_chain_id: vaultChainId,
-        threshold,
+        threshold: 2,
         status: "pending",
         member_count: membershipRows.length,
       },

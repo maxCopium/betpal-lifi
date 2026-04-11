@@ -36,7 +36,7 @@ export async function requireUser(req: Request): Promise<AuthedUser> {
   }
 
   // Pull the linked wallet via the Privy server API. We need the embedded
-  // wallet address to deploy the Safe, so it's not optional.
+  // wallet address for deposits and payouts, so it's not optional.
   const privyUser = await privy().getUser(claims.userId);
   const wallet = privyUser.linkedAccounts?.find(
     (a) => a.type === "wallet" && (a as { walletClientType?: string }).walletClientType === "privy",

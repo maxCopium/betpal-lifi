@@ -1,6 +1,14 @@
 @AGENTS.md
 
-<!-- BEGIN:backlog -->
+# Architecture
+
+BetPal uses **per-group custodial wallets** (not Safe multisig). Each group gets a deterministic
+EOA derived from `keccak256(resolverPrivateKey + groupId)`. The app signs all on-chain transactions
+(vault redemptions, USDC transfers, gas top-ups) via `src/lib/groupWallet.ts`.
+
+The `safe_address` column in the DB is a **legacy name** — it stores the derived wallet address.
+Do not introduce Safe/multisig logic.
+
 # Known Gaps (see BACKLOG.md for full detail)
 
 ## P0 — Nothing works without these
@@ -11,16 +19,14 @@
 ## P1 — Happy path blockers
 - **Phase 3 deposit confirm**: no integration test; a failed confirm leaves a transaction stuck in `executing`
 - **Bet settlement**: `resolveBet.ts` → cron → ledger payouts has zero integration test coverage
-- **Withdrawal expiry reversal**: no test, no automated trigger
-- **Safe lazy deploy**: Safe only materialises on-chain after first Phase 3 deposit; tests that run Safe ops before that will fail
+- **Withdrawal reversal**: if on-chain withdrawal fails after ledger debit, reversal is automatic but untested
 
 ## P2 — Beta gaps
 - **No integration tests** on deposit state machine, bet settlement, or cron worker
-- **Post-deposit invites**: owner-add re-invite flow not wired (UI + API)
 - **Member list**: `GroupDashboard.tsx` doesn't render members (API supports it)
 - **`earn.ts` stub**: LI.FI Earn wrapper incomplete; `MORPHO_USDC_VAULT_BASE` must be hardcoded
 
 ## P3 — Polish
 - Demo mode (`NEXT_PUBLIC_BETPAL_DEMO_MODE`) partially wired
 - Add `vercel.json` with hourly cron for `/api/cron/resolve-bets`
-<!-- END:backlog -->
+- Rename `safe_address` DB column to `wallet_address` (cosmetic, requires migration)

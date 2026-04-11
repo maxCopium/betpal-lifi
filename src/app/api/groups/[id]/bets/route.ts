@@ -116,6 +116,7 @@ export async function POST(
         polymarket_market_id: body.polymarket_market_id,
         polymarket_url: polymarketUrl,
         title: body.title ?? market.question,
+        question: market.question,
         options: outcomes,
         join_deadline: new Date(joinDeadline).toISOString(),
         max_resolution_date: maxResolution,
