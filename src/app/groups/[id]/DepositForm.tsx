@@ -19,6 +19,8 @@ export function DepositForm({ groupId }: { groupId: string }) {
   const [localError, setLocalError] = useState<string | null>(null);
   const flow = useDepositFlow();
 
+  const [fundingOpen, setFundingOpen] = useState(false);
+
   async function onFundWallet() {
     setLocalError(null);
     const wallet = wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
@@ -26,15 +28,31 @@ export function DepositForm({ groupId }: { groupId: string }) {
       setLocalError("no wallet available — sign in first");
       return;
     }
-    try {
-      const result = await fundWallet({
-        address: wallet.address,
-        options: { chain: base, amount: "10", asset: "USDC" },
-      });
-      setLocalError("fundWallet result: " + JSON.stringify(result));
-    } catch (err: unknown) {
-      setLocalError("fundWallet error: " + (err instanceof Error ? err.message : String(err)));
+
+    // Open Privy funding page in a popup window
+    const w = 480, h = 700;
+    const left = window.screenX + (window.innerWidth - w) / 2;
+    const top = window.screenY + (window.innerHeight - h) / 2;
+    const popup = window.open(
+      `https://home.privy.io/fund?address=${wallet.address}&chain=8453&asset=USDC&amount=10`,
+      "betpal_fund",
+      `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes`
+    );
+
+    if (!popup) {
+      setLocalError("Popup blocked — please allow popups for this site");
+      return;
     }
+
+    setFundingOpen(true);
+
+    // Poll until popup is closed
+    const poll = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(poll);
+        setFundingOpen(false);
+      }
+    }, 500);
   }
 
   async function onDeposit(e: React.FormEvent) {
@@ -102,6 +120,14 @@ export function DepositForm({ groupId }: { groupId: string }) {
         fromLabel={SOURCES[sourceIdx].label}
         toLabel="Group vault · Base"
         onClose={flow.reset}
+      />
+      <CopyProgressDialog
+        open={fundingOpen}
+        title="Add funds"
+        status="Complete the payment in the popup window…"
+        fromLabel="Your card"
+        toLabel="BetPal account"
+        onClose={() => setFundingOpen(false)}
       />
     </>
   );
