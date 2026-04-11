@@ -17,7 +17,19 @@ export function DepositForm({ groupId }: { groupId: string }) {
   const [localError, setLocalError] = useState<string | null>(null);
   const flow = useDepositFlow();
 
-  const [fundingOpen, setFundingOpen] = useState(false);
+  const [fundingStep, setFundingStep] = useState<"idle" | "pending" | "done">("idle");
+
+  function openFunding() {
+    const w = 480, h = 700;
+    const left = window.screenX + (window.innerWidth - w) / 2;
+    const top = window.screenY + (window.innerHeight - h) / 2;
+    window.open(
+      "https://home.privy.io/",
+      "betpal_fund",
+      `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes`,
+    );
+    setFundingStep("pending");
+  }
 
   async function onDeposit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,9 +85,43 @@ export function DepositForm({ groupId }: { groupId: string }) {
         )}
         <div className="flex gap-2">
           <button type="submit">Deposit</button>
-          <button type="button" onClick={() => setFundingOpen(true)}>Add funds</button>
+          <button type="button" onClick={openFunding}>
+            {fundingStep === "pending" ? "Open wallet again" : "Add funds"}
+          </button>
+          {fundingStep === "pending" && (
+            <button type="button" onClick={() => setFundingStep("done")}>
+              Done
+            </button>
+          )}
         </div>
+
+        {fundingStep === "pending" && (
+          <div className="window" style={{ marginTop: 8 }}>
+            <div className="window-body" style={{ padding: 8 }}>
+              <p className="text-xs" style={{ margin: 0 }}>
+                A wallet window has opened. Add funds there, then click <strong>Done</strong> when finished.
+              </p>
+            </div>
+          </div>
+        )}
+        {fundingStep === "done" && (
+          <p className="text-xs" style={{ color: "#080" }}>
+            Funds added. You can now deposit to the group above.
+          </p>
+        )}
       </form>
+
+      <div style={{ marginTop: 8 }}>
+        <button
+          type="button"
+          className="text-xs"
+          onClick={() => window.open("https://home.privy.io/", "betpal_fund")}
+          style={{ fontSize: 11 }}
+        >
+          Manage wallet
+        </button>
+      </div>
+
       <CopyProgressDialog
         open={flow.open}
         title="Copying funds…"
@@ -85,31 +131,6 @@ export function DepositForm({ groupId }: { groupId: string }) {
         toLabel="Group vault · Base"
         onClose={flow.reset}
       />
-      {fundingOpen && (
-        <div
-          className="fixed inset-0 flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.35)", zIndex: 50 }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Add funds"
-        >
-          <div className="window" style={{ width: 480, height: 600 }}>
-            <div className="title-bar">
-              <div className="title-bar-text">Add funds</div>
-              <div className="title-bar-controls">
-                <button aria-label="Close" onClick={() => setFundingOpen(false)} />
-              </div>
-            </div>
-            <div className="window-body" style={{ padding: 0, height: "calc(100% - 28px)" }}>
-              <iframe
-                src="https://home.privy.io/"
-                style={{ width: "100%", height: "100%", border: "none" }}
-                allow="payment; clipboard-write"
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
