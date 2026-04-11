@@ -40,7 +40,8 @@ create index if not exists users_basename_trgm
 create table if not exists groups (
   id               uuid primary key default uuid_generate_v4(),
   name             text not null,
-  safe_address     citext,                  -- group custodial wallet address (legacy column name)
+  safe_address     citext,                  -- group wallet address (legacy column name)
+  privy_wallet_id  text,                    -- Privy server wallet ID for signing
   vault_address    citext not null,         -- Morpho USDC on Base for v1
   vault_chain_id   integer not null default 8453,
   threshold        integer not null check (threshold >= 2),
@@ -204,6 +205,9 @@ create index if not exists invite_links_group_idx on invite_links(group_id);
 -- =============================================================================
 -- MIGRATIONS (idempotent additions)
 -- =============================================================================
+
+-- Privy server wallet ID for group custodial wallets.
+alter table groups add column if not exists privy_wallet_id text;
 
 -- Mock market resolution for demo purposes.
 alter table bets add column if not exists mock_resolved_outcome text;

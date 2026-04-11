@@ -3,7 +3,7 @@ import { z } from "zod";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { env } from "@/lib/env";
-import { deriveGroupWallet } from "@/lib/groupWallet";
+import { createGroupWallet } from "@/lib/groupWallet";
 
 /**
  * POST /api/groups
@@ -83,13 +83,13 @@ export async function POST(request: Request): Promise<Response> {
     }
     const groupId = groupRow.id as string;
 
-    // Step 4: derive the per-group custodial wallet address.
-    const { address: walletAddress } = deriveGroupWallet(groupId);
+    // Step 4: create a Privy server wallet for this group.
+    const { walletId, address: walletAddress } = await createGroupWallet();
 
-    // Step 5: write the derived wallet address (stored in safe_address column).
+    // Step 5: write the wallet address and Privy wallet ID.
     const { error: updateErr } = await sb
       .from("groups")
-      .update({ safe_address: walletAddress, threshold: 2 })
+      .update({ safe_address: walletAddress, privy_wallet_id: walletId, threshold: 2 })
       .eq("id", groupId);
     if (updateErr) {
       await sb.from("groups").delete().eq("id", groupId);

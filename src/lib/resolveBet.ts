@@ -131,7 +131,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     try {
       const { data: group } = await sb
         .from("groups")
-        .select("safe_address, vault_address")
+        .select("safe_address, vault_address, privy_wallet_id")
         .eq("id", groupId)
         .single();
 
@@ -193,8 +193,24 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   // Best-effort: if on-chain payout fails, the ledger credit still stands
   // and the winner can manually withdraw later.
   const allPayouts = result.payouts.filter((p) => p.amountCents > 0);
+
+  // Fetch group wallet info for Privy signing (needed for auto-payout).
+  let groupWallet: { privy_wallet_id: string; safe_address: string } | null = null;
+  if (allPayouts.length > 0) {
+    const { data: gw } = await sb
+      .from("groups")
+      .select("privy_wallet_id, safe_address")
+      .eq("id", groupId)
+      .single();
+    if (gw?.privy_wallet_id && gw?.safe_address) {
+      groupWallet = gw as { privy_wallet_id: string; safe_address: string };
+    }
+  }
+
   for (const p of allPayouts) {
     try {
+      if (!groupWallet) continue;
+
       // Look up the winner's wallet address.
       const { data: user } = await sb
         .from("users")
@@ -214,7 +230,8 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
       // Send only the payout amount — yield was already credited as separate
       // yield_credit ledger events and doesn't need additional on-chain transfer.
       await redeemFromVault(
-        groupId,
+        groupWallet.privy_wallet_id,
+        groupWallet.safe_address as `0x${string}`,
         p.amountCents,
         user.wallet_address as `0x${string}`,
       );

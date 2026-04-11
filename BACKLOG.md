@@ -6,7 +6,7 @@ Ordered by what blocks a working demo first.
 
 ## P0 — Must have before any E2E path works
 
-### 1. Environment variables (13 vars)
+### 1. Environment variables (11 vars)
 `betpal/.env.example` → copy to `.env.local` and populate all:
 
 | Variable | Source |
@@ -18,8 +18,6 @@ Ordered by what blocks a working demo first.
 | `SUPABASE_SECRET_KEY` | Supabase project → Settings → API |
 | `LIFI_API_KEY` | LI.FI developer portal |
 | `LIFI_INTEGRATOR` | `betpal` (already set) |
-| `APP_RESOLVER_PRIVATE_KEY` | `node -e "console.log(require('viem').generatePrivateKey())"` |
-| `APP_RESOLVER_ADDRESS` | Derive from the key above |
 | `BASE_RPC_URL` | `https://mainnet.base.org` (already set) or Alchemy/Infura |
 | `MORPHO_USDC_VAULT_BASE` | Discover via LI.FI Earn API (see `src/lib/earn.ts`) |
 | `NEXT_PUBLIC_BETPAL_DEMO_MODE` | `false` for real; `true` for offline UI |
@@ -33,10 +31,10 @@ See **DB Setup** section below for the one-command path.
 `/api/cron/resolve-bets` exists but there is no `vercel.json` cron config.
 The endpoint must be manually triggered (or a `vercel.json` added) — see P3 below.
 
-### 4. Fund resolver wallet with Base ETH
-The resolver wallet (`APP_RESOLVER_PRIVATE_KEY`) needs a small amount of ETH on Base for gas.
-Send ~$0.50 of ETH to the resolver address. Each derived group wallet will be auto-funded
-from the resolver on first on-chain tx. Base L2 gas is ~$0.001-0.005/tx.
+### 4. Fund Privy server wallets with Base ETH
+Each group's Privy server wallet needs a small amount of ETH on Base for gas.
+Privy may handle gas sponsorship, otherwise send ~$0.50 of ETH to each group wallet.
+Base L2 gas is ~$0.001-0.005/tx.
 
 ---
 

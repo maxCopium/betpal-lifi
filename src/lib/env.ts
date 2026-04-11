@@ -28,10 +28,6 @@ export const env = {
   lifiApiKey: () => required("LIFI_API_KEY"),
   lifiIntegrator: () => optional("LIFI_INTEGRATOR") ?? "betpal",
 
-  // App resolver key
-  resolverPrivateKey: () => required("APP_RESOLVER_PRIVATE_KEY"),
-  resolverAddress: () => required("APP_RESOLVER_ADDRESS"),
-
   // Base
   baseRpcUrl: () => optional("BASE_RPC_URL") ?? "https://mainnet.base.org",
 

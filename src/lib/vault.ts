@@ -1,11 +1,12 @@
 import "server-only";
 import { basePublicClient } from "./viem";
-import { groupWalletClient } from "./groupWallet";
+import { sendGroupContractCall } from "./groupWallet";
 import { env } from "./env";
 
 /**
  * ERC-4626 vault helpers + on-chain redeem/transfer for custodial payouts.
  *
+ * Signing is done via Privy server wallets — no local private keys.
  * USDC on Base: 6 decimals → 1 cent = 10_000 base units.
  */
 
@@ -99,17 +100,17 @@ export async function getVaultBalanceCents(
  *   2. vault.redeem(shares, groupWallet, groupWallet) — USDC back to group wallet
  *   3. USDC.transfer(recipient, amount) — send to user's wallet
  *
+ * Signing is via Privy server wallet (privyWalletId). No local keys.
  * Returns the tx hashes for both operations, or throws on failure.
  */
 export async function redeemFromVault(
-  groupId: string,
+  privyWalletId: string,
+  groupWalletAddress: `0x${string}`,
   amountCents: number,
   recipientAddress: `0x${string}`,
 ): Promise<{ redeemTxHash: `0x${string}`; transferTxHash: `0x${string}` }> {
   const vaultAddress = env.morphoVaultBase() as `0x${string}`;
   const publicClient = basePublicClient();
-  const wallet = groupWalletClient(groupId);
-  const groupAddress = wallet.account.address;
 
   // Convert cents to USDC base units (6 decimals).
   const usdcAmount = BigInt(amountCents) * CENTS_TO_USDC_UNITS;
@@ -127,21 +128,23 @@ export async function redeemFromVault(
   }
 
   // Redeem shares → USDC arrives at the group wallet.
-  const redeemTxHash = await wallet.writeContract({
-    address: vaultAddress,
-    abi: ERC4626_ABI,
-    functionName: "redeem",
-    args: [sharesNeeded, groupAddress, groupAddress],
-  });
+  const redeemTxHash = await sendGroupContractCall(
+    privyWalletId,
+    vaultAddress,
+    ERC4626_ABI,
+    "redeem",
+    [sharesNeeded, groupWalletAddress, groupWalletAddress],
+  );
   await publicClient.waitForTransactionReceipt({ hash: redeemTxHash });
 
   // Transfer USDC from group wallet to recipient.
-  const transferTxHash = await wallet.writeContract({
-    address: USDC_BASE as `0x${string}`,
-    abi: ERC20_TRANSFER_ABI,
-    functionName: "transfer",
-    args: [recipientAddress, usdcAmount],
-  });
+  const transferTxHash = await sendGroupContractCall(
+    privyWalletId,
+    USDC_BASE as `0x${string}`,
+    ERC20_TRANSFER_ABI,
+    "transfer",
+    [recipientAddress, usdcAmount],
+  );
   await publicClient.waitForTransactionReceipt({ hash: transferTxHash });
 
   return { redeemTxHash, transferTxHash };

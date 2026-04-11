@@ -2,17 +2,18 @@
 
 # Architecture
 
-BetPal uses **per-group custodial wallets** (not Safe multisig). Each group gets a deterministic
-EOA derived from `keccak256(resolverPrivateKey + groupId)`. The app signs all on-chain transactions
-(vault redemptions, USDC transfers, gas top-ups) via `src/lib/groupWallet.ts`.
+BetPal uses **Privy server wallets** for per-group custodial wallets. Each group gets its own
+Privy-managed wallet created via `privy().walletApi.createWallet()`. The app signs all on-chain
+transactions (vault redemptions, USDC transfers) via the Privy wallet API — no local private keys.
 
-The `safe_address` column in the DB is a **legacy name** — it stores the derived wallet address.
-Do not introduce Safe/multisig logic.
+The `safe_address` column in the DB is a **legacy name** — it stores the wallet address.
+The `privy_wallet_id` column stores the Privy wallet ID used for signing.
+Do not introduce Safe/multisig logic or local key derivation.
 
 # Known Gaps (see BACKLOG.md for full detail)
 
 ## P0 — Nothing works without these
-- **Env vars**: 13 vars in `.env.local` are empty (Privy, Supabase, LI.FI, resolver keypair, Morpho vault, cron secret)
+- **Env vars**: 11 vars in `.env.local` are empty (Privy, Supabase, LI.FI, Morpho vault, cron secret)
 - **Database**: `supabase/schema.sql` not yet applied — run via SQL Editor or `npm run db:apply` (see `supabase/README.md`)
 - **Cron not scheduled**: no `vercel.json` cron config; `/api/cron/resolve-bets` must be triggered manually
 
