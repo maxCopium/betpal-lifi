@@ -11,6 +11,7 @@ export type SourceChoice = {
   decimals: number;
 };
 
+/** Legacy hardcoded sources — kept as fallback if dynamic fetch fails. */
 export const SOURCES: SourceChoice[] = [
   {
     label: "USDC · Base",

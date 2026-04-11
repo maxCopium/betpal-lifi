@@ -14,6 +14,7 @@ import { DepositForm } from "./DepositForm";
 import { WithdrawForm } from "./WithdrawForm";
 import { NewBetDialog } from "./NewBetDialog";
 import { BetList } from "./BetList";
+import { useVaultInfo } from "@/hooks/useVaultInfo";
 
 type GroupRow = {
   id: string;
@@ -65,6 +66,8 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   const [reconciling, setReconciling] = useState(false);
   const [newBetOpen, setNewBetOpen] = useState(false);
   const [betsRefreshKey, setBetsRefreshKey] = useState(0);
+  const vaultChainId = 8453;
+  const { info: vaultInfo } = useVaultInfo(vaultChainId, group?.vault_address ?? "");
 
   async function runReconcile() {
     setReconciling(true);
@@ -168,6 +171,54 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
       <div className="break-all">
         <strong>Vault:</strong> {group.vault_address}
       </div>
+      {vaultInfo && (
+        <div className="window" style={{ marginTop: 4 }}>
+          <div className="title-bar" style={{ padding: "2px 4px" }}>
+            <div className="title-bar-text" style={{ fontSize: 11 }}>
+              Yield Info (via LI.FI Earn)
+            </div>
+          </div>
+          <div className="window-body" style={{ padding: 6 }}>
+            <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+              <tbody>
+                {vaultInfo.protocol && (
+                  <tr>
+                    <td style={{ padding: "1px 0", color: "#666" }}>Protocol</td>
+                    <td style={{ padding: "1px 0", textAlign: "right", fontWeight: 600 }}>{vaultInfo.protocol}</td>
+                  </tr>
+                )}
+                {vaultInfo.apy && (
+                  <tr>
+                    <td style={{ padding: "1px 0", color: "#666" }}>APY</td>
+                    <td style={{ padding: "1px 0", textAlign: "right", fontWeight: 600, color: "#080" }}>
+                      {(vaultInfo.apy.total * 100).toFixed(2)}%
+                      {vaultInfo.apy.base != null && vaultInfo.apy.reward != null && (
+                        <span style={{ fontWeight: 400, color: "#666" }}>
+                          {" "}({(vaultInfo.apy.base * 100).toFixed(1)}% base + {(vaultInfo.apy.reward * 100).toFixed(1)}% reward)
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                {vaultInfo.tvl && (
+                  <tr>
+                    <td style={{ padding: "1px 0", color: "#666" }}>TVL</td>
+                    <td style={{ padding: "1px 0", textAlign: "right", fontWeight: 600 }}>
+                      ${vaultInfo.tvl.usd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    </td>
+                  </tr>
+                )}
+                {vaultInfo.asset && (
+                  <tr>
+                    <td style={{ padding: "1px 0", color: "#666" }}>Asset</td>
+                    <td style={{ padding: "1px 0", textAlign: "right" }}>{vaultInfo.asset}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-1" style={{ marginTop: 8 }}>
         <div>
           <button onClick={createInvite} disabled={inviting || group.status !== "pending"}>

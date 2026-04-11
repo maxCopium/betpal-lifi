@@ -116,6 +116,31 @@ export async function listVaults(opts: {
   return z.array(VaultSchema).parse(arr);
 }
 
+/**
+ * GET /v1/earn/vault — full detail for a single vault.
+ * Returns APY breakdown (base/reward/total), historical APY (1d/7d/30d), TVL.
+ */
+export async function getVaultDetail(opts: {
+  chainId: number;
+  address: string;
+}): Promise<EarnVault> {
+  const url = new URL(`${EARN_BASE}/v1/earn/vault`);
+  url.searchParams.set("chainId", String(opts.chainId));
+  url.searchParams.set("address", opts.address);
+  const res = await fetch(url.toString(), {
+    headers: { accept: "application/json" },
+    next: { revalidate: 60 }, // cache 1 min — APY changes often
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(
+      `Earn /v1/earn/vault failed: ${res.status} ${body.slice(0, 500)}`,
+    );
+  }
+  const json = await res.json();
+  return VaultSchema.parse(json);
+}
+
 /** Read a wallet's positions across Earn-indexed vaults. */
 export async function getPortfolio(walletAddress: string): Promise<unknown> {
   const url = new URL(`${EARN_BASE}/v1/earn/portfolio/${walletAddress}`);

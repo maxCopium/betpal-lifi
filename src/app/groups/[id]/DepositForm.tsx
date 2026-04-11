@@ -8,8 +8,9 @@
 import { useState } from "react";
 import { useWallets } from "@privy-io/react-auth";
 import { CopyProgressDialog } from "@/components/win98/CopyProgressDialog";
-import { useDepositFlow, SOURCES } from "@/hooks/useDepositFlow";
+import { useDepositFlow } from "@/hooks/useDepositFlow";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
+import { useDepositSources } from "@/hooks/useDepositSources";
 
 /** Trim to max N decimal places, strip trailing zeros */
 function trimDecimals(val: string, max: number): string {
@@ -24,6 +25,7 @@ function trimDecimals(val: string, max: number): string {
 export function DepositForm({ groupId }: { groupId: string }) {
   const { wallets } = useWallets();
   const { balances, loading: balLoading, refresh: refreshBalance } = useWalletBalances();
+  const { sources, loading: sourcesLoading } = useDepositSources();
   const [sourceIdx, setSourceIdx] = useState(0);
   const [amount, setAmount] = useState("10");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -53,9 +55,15 @@ export function DepositForm({ groupId }: { groupId: string }) {
       return;
     }
 
+    const src = sources[sourceIdx];
     await flow.execute({
       groupId,
-      source: SOURCES[sourceIdx],
+      source: {
+        label: `${src.symbol} · ${src.chainName}`,
+        chainId: src.chainId,
+        token: src.token as `0x${string}`,
+        decimals: src.decimals,
+      },
       amount,
       wallet,
     });
@@ -71,11 +79,12 @@ export function DepositForm({ groupId }: { groupId: string }) {
           <select
             id="dep-source"
             value={sourceIdx}
+            disabled={sourcesLoading}
             onChange={(e) => setSourceIdx(Number(e.target.value))}
           >
-            {SOURCES.map((s, i) => (
-              <option key={s.label} value={i}>
-                {s.label}
+            {sources.map((s, i) => (
+              <option key={`${s.chainId}-${s.token}`} value={i}>
+                {s.symbol} · {s.chainName}
               </option>
             ))}
           </select>
@@ -217,7 +226,7 @@ export function DepositForm({ groupId }: { groupId: string }) {
         title="Copying funds…"
         status={flow.status}
         progress={flow.progress}
-        fromLabel={SOURCES[sourceIdx].label}
+        fromLabel={sources[sourceIdx] ? `${sources[sourceIdx].symbol} · ${sources[sourceIdx].chainName}` : "Source"}
         toLabel="Group vault · Base"
         onClose={flow.reset}
       />
