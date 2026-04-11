@@ -5,7 +5,7 @@
  *
  * Each section (group info, deposit, withdraw, bets) is its own
  * DraggableWindow that can be moved, minimized, and restored from
- * the taskbar. WalletWindow is a separate persistent window.
+ * the taskbar. Wallet is shown in the sidebar (SidebarWallet).
  */
 import { useCallback, useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
