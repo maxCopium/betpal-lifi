@@ -6,54 +6,18 @@
  * dialog throughout.
  */
 import { useState } from "react";
-import { useWallets, useFundWallet } from "@privy-io/react-auth";
-import { base } from "viem/chains";
+import { useWallets } from "@privy-io/react-auth";
 import { CopyProgressDialog } from "@/components/win98/CopyProgressDialog";
 import { useDepositFlow, SOURCES } from "@/hooks/useDepositFlow";
 
 export function DepositForm({ groupId }: { groupId: string }) {
   const { wallets } = useWallets();
-  const { fundWallet } = useFundWallet();
   const [sourceIdx, setSourceIdx] = useState(0);
   const [amount, setAmount] = useState("10");
   const [localError, setLocalError] = useState<string | null>(null);
   const flow = useDepositFlow();
 
   const [fundingOpen, setFundingOpen] = useState(false);
-
-  async function onFundWallet() {
-    setLocalError(null);
-    const wallet = wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
-    if (!wallet) {
-      setLocalError("no wallet available — sign in first");
-      return;
-    }
-
-    // Open Privy funding page in a popup window
-    const w = 480, h = 700;
-    const left = window.screenX + (window.innerWidth - w) / 2;
-    const top = window.screenY + (window.innerHeight - h) / 2;
-    const popup = window.open(
-      `https://home.privy.io/fund?address=${wallet.address}&chain=8453&asset=USDC&amount=10`,
-      "betpal_fund",
-      `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes`
-    );
-
-    if (!popup) {
-      setLocalError("Popup blocked — please allow popups for this site");
-      return;
-    }
-
-    setFundingOpen(true);
-
-    // Poll until popup is closed
-    const poll = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(poll);
-        setFundingOpen(false);
-      }
-    }, 500);
-  }
 
   async function onDeposit(e: React.FormEvent) {
     e.preventDefault();
@@ -109,7 +73,7 @@ export function DepositForm({ groupId }: { groupId: string }) {
         )}
         <div className="flex gap-2">
           <button type="submit">Deposit</button>
-          <button type="button" onClick={onFundWallet}>Add funds (test)</button>
+          <button type="button" onClick={() => setFundingOpen(true)}>Add funds</button>
         </div>
       </form>
       <CopyProgressDialog
@@ -121,14 +85,31 @@ export function DepositForm({ groupId }: { groupId: string }) {
         toLabel="Group vault · Base"
         onClose={flow.reset}
       />
-      <CopyProgressDialog
-        open={fundingOpen}
-        title="Add funds"
-        status="Complete the payment in the popup window…"
-        fromLabel="Your card"
-        toLabel="BetPal account"
-        onClose={() => setFundingOpen(false)}
-      />
+      {fundingOpen && (
+        <div
+          className="fixed inset-0 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.35)", zIndex: 50 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Add funds"
+        >
+          <div className="window" style={{ width: 480, height: 600 }}>
+            <div className="title-bar">
+              <div className="title-bar-text">Add funds</div>
+              <div className="title-bar-controls">
+                <button aria-label="Close" onClick={() => setFundingOpen(false)} />
+              </div>
+            </div>
+            <div className="window-body" style={{ padding: 0, height: "calc(100% - 28px)" }}>
+              <iframe
+                src="https://home.privy.io/"
+                style={{ width: "100%", height: "100%", border: "none" }}
+                allow="payment; clipboard-write"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
