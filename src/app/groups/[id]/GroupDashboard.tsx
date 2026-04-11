@@ -46,6 +46,19 @@ type ReconcileResponse = {
   onchain_available: boolean;
 };
 
+type MemberRow = {
+  user_id: string;
+  role: string;
+  display_name: string | null;
+  wallet_address: string | null;
+};
+
+type MembersResponse = { members: MemberRow[] };
+
+function shortAddr(addr: string): string {
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
 function fmtCents(c: number): string {
   const dollars = c / 100;
   return dollars.toLocaleString("en-US", {
@@ -67,6 +80,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   const [reconciling, setReconciling] = useState(false);
   const [newBetOpen, setNewBetOpen] = useState(false);
   const [betsRefreshKey, setBetsRefreshKey] = useState(0);
+  const [members, setMembers] = useState<MemberRow[]>([]);
   const { info: vaultInfo } = useVaultInfo(8453, group?.vault_address ?? "");
 
   async function runReconcile() {
@@ -134,6 +148,9 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
       }
     })();
     void loadBalance();
+    void authedFetch<MembersResponse>(`/api/groups/${groupId}/members`)
+      .then((r) => { if (!cancelled) setMembers(r.members); })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, [ready, authenticated, groupId, loadBalance]);
 
@@ -155,10 +172,35 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
       {/* ── Group Info Window ── */}
       <DraggableWindow id="group-info" title={group.name}>
         <div className="flex flex-col gap-3">
-          <div style={{ display: "flex", gap: 16 }}>
+          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <div><strong>Status:</strong> {group.status}</div>
-            <div><strong>Members:</strong> {group.threshold}</div>
+            <div><strong>Members:</strong> {members.length || group.threshold}</div>
           </div>
+
+          {/* Member list */}
+          {members.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {members.map((m) => (
+                <span
+                  key={m.user_id}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "2px 8px",
+                    background: m.role === "owner" ? "#e6e8ff" : "#f0f0f0",
+                    border: "1px solid #ccc",
+                    fontSize: 12,
+                  }}
+                >
+                  {m.display_name || (m.wallet_address ? shortAddr(m.wallet_address) : "Unknown")}
+                  {m.role === "owner" && (
+                    <span style={{ fontSize: 10, opacity: 0.6 }}>owner</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Vault yield info */}
           {vaultInfo && vaultInfo.apy && (
