@@ -2,21 +2,37 @@
 @import "../../node_modules/98.css/dist/98.css";
 
 /*
- * BetPal — Win98 chrome with mobile-aware layout.
+ * BetPal — Win98 LOOK with modern FEEL.
  *
- * Rules of engagement (do not break these):
- *  - 98.css owns ALL visual chrome: borders, buttons, fieldsets, title bars,
- *    inputs, scrollbars. Never restyle these with Tailwind.
- *  - Tailwind is for LAYOUT ONLY: flex, grid, gap, padding, width, max-width,
- *    responsive breakpoints. Never colors/borders/typography.
- *  - The desktop teal background and the windows-on-desktop look are invariant.
- *  - On mobile (<768px), windows become full-bleed cards stacked vertically;
- *    the taskbar collapses to a fixed bottom strip.
+ * Rules of engagement:
+ *  - 98.css owns visual chrome: borders, buttons, fieldsets, title bars,
+ *    inputs, scrollbars.
+ *  - We OVERRIDE sizes, spacing, hover states, and responsiveness for
+ *    modern usability while preserving the retro aesthetic.
+ *  - Tailwind is for layout: flex, grid, gap, padding, width, max-width.
+ *  - The desktop teal background and windows-on-desktop look are invariant.
  */
 
 :root {
   --betpal-desktop-bg: #008080;
   --betpal-content-max: 960px;
+  --betpal-font-base: 13px;
+  --betpal-font-sm: 12px;
+  --betpal-font-xs: 11px;
+  --betpal-font-lg: 15px;
+  --betpal-radius: 0; /* keep sharp Win98 corners */
+  --betpal-space-xs: 4px;
+  --betpal-space-sm: 8px;
+  --betpal-space-md: 12px;
+  --betpal-space-lg: 16px;
+  --betpal-space-xl: 24px;
+  --betpal-color-link: #000080;
+  --betpal-color-link-hover: #0000cc;
+  --betpal-color-success: #006600;
+  --betpal-color-error: #cc0000;
+  --betpal-color-warning: #996600;
+  --betpal-color-hover-bg: rgba(0, 0, 128, 0.06);
+  --betpal-color-active-bg: rgba(0, 0, 128, 0.12);
 }
 
 html,
@@ -29,25 +45,106 @@ body {
   font-family:
     "Pixelated MS Sans Serif", "MS Sans Serif", "Microsoft Sans Serif",
     Tahoma, sans-serif;
-  font-size: 11px;
+  font-size: var(--betpal-font-base);
   color: #000;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Desktop: sidebar + content, Explorer layout. */
+/* ─── GLOBAL OVERRIDES: make 98.css elements bigger + more usable ─── */
+
+/* Buttons: bigger padding, min touch target */
+button,
+input[type="submit"],
+input[type="reset"] {
+  min-height: 28px;
+  padding: 4px 12px;
+  font-size: var(--betpal-font-base);
+  cursor: pointer;
+}
+
+/* Text inputs: taller, easier to read */
+input[type="text"],
+input[type="email"],
+input[type="number"],
+input[type="search"],
+input[type="password"],
+input[type="url"],
+input[type="datetime-local"],
+select,
+textarea {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: var(--betpal-font-base);
+}
+
+/* Labels in 98.css fieldsets */
+label {
+  font-size: var(--betpal-font-base);
+}
+
+/* Fieldset legends */
+fieldset legend {
+  font-size: var(--betpal-font-base);
+  font-weight: 600;
+}
+
+/* Window body: more breathing room */
+.window-body {
+  padding: var(--betpal-space-md);
+  font-size: var(--betpal-font-base);
+  line-height: 1.5;
+}
+
+/* Paragraphs inside windows */
+.window-body p {
+  margin: 0 0 var(--betpal-space-sm);
+  line-height: 1.5;
+}
+
+/* Links: visible hover state */
+a {
+  color: var(--betpal-color-link);
+  transition: color 0.15s;
+}
+
+a:hover {
+  color: var(--betpal-color-link-hover);
+}
+
+/* Tables: more padding */
+table {
+  font-size: var(--betpal-font-base);
+}
+
+th, td {
+  padding: 6px 10px;
+}
+
+/* Scrollbars: keep 98 look but make them wider on touch */
+@media (pointer: coarse) {
+  ::-webkit-scrollbar {
+    width: 16px;
+  }
+}
+
+/* ─── DESKTOP LAYOUT ─── */
+
 .betpal-desktop {
   min-height: 100vh;
-  padding: 8px 16px 56px 16px; /* bottom space for taskbar */
+  padding: var(--betpal-space-md) var(--betpal-space-lg) 56px var(--betpal-space-lg);
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--betpal-space-md);
   max-width: 1200px;
   margin: 0 auto;
 }
 
+/* ─── SIDEBAR ─── */
+
 .betpal-sidebar {
-  width: 220px;
+  width: 240px;
   flex-shrink: 0;
   position: sticky;
   top: 8px;
@@ -64,7 +161,34 @@ body {
   flex: 1;
   max-height: calc(100vh - 100px);
   overflow-y: auto;
+  padding: var(--betpal-space-sm);
 }
+
+/* Sidebar nav items: bigger click targets, hover feedback */
+.betpal-sidebar .tree-view li {
+  padding: 3px 0;
+}
+
+.betpal-sidebar .tree-view a,
+.betpal-sidebar .tree-view summary {
+  padding: 4px 8px;
+  border-radius: 2px;
+  display: block;
+  transition: background 0.12s;
+  font-size: var(--betpal-font-base);
+}
+
+.betpal-sidebar .tree-view a:hover,
+.betpal-sidebar .tree-view summary:hover {
+  background: var(--betpal-color-hover-bg);
+}
+
+.betpal-sidebar .tree-view a:active,
+.betpal-sidebar .tree-view summary:active {
+  background: var(--betpal-color-active-bg);
+}
+
+/* ─── CONTENT ─── */
 
 .betpal-content {
   flex: 1;
@@ -72,28 +196,38 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: var(--betpal-space-lg);
 }
 
-/* Nav links in sidebar — remove default link styling. */
+/* Nav links — remove default styling, add hover */
 .betpal-nav-link {
   color: #000;
   text-decoration: none;
+  padding: 3px 6px;
+  border-radius: 2px;
+  transition: background 0.12s;
 }
 
 .betpal-nav-link:hover {
   text-decoration: underline;
+  background: var(--betpal-color-hover-bg);
 }
 
-/* Tree view collapsed state — hide nested ul. */
+/* Tree view collapsed state */
 .tree-view li.collapsed > ul {
   display: none;
 }
 
+/* ─── RESPONSIVE: MOBILE ─── */
+
 @media (max-width: 768px) {
+  body {
+    font-size: var(--betpal-font-base);
+  }
+
   .betpal-desktop {
-    padding: 8px 6px 56px 6px;
-    gap: 8px;
+    padding: var(--betpal-space-sm) var(--betpal-space-sm) 56px var(--betpal-space-sm);
+    gap: var(--betpal-space-sm);
     flex-direction: column;
   }
 
@@ -108,34 +242,62 @@ body {
   }
 
   .betpal-content {
-    gap: 8px;
+    gap: var(--betpal-space-sm);
+  }
+
+  /* Bigger touch targets on mobile */
+  button,
+  input[type="submit"],
+  input[type="reset"] {
+    min-height: 36px;
+    padding: 6px 14px;
+  }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="number"],
+  input[type="search"],
+  input[type="password"],
+  input[type="url"],
+  input[type="datetime-local"],
+  select,
+  textarea {
+    min-height: 36px;
+    padding: 6px 10px;
   }
 }
 
-/* The Win98 .window from 98.css; we constrain its width on desktop only. */
+/* ─── WINDOWS ─── */
+
 .betpal-window {
   width: 100%;
   max-width: var(--betpal-content-max);
 }
 
-/* Title bars — make sure long titles still truncate cleanly on small screens. */
+/* Title bars — truncation + better height */
+.title-bar {
+  min-height: 24px;
+}
+
 .title-bar-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: var(--betpal-font-base);
 }
 
-/* Taskbar — pinned to the bottom of the viewport, classic Win98 inset look. */
+/* ─── TASKBAR ─── */
+
 .betpal-taskbar {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 36px;
+  height: 40px;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 4px;
+  padding: 2px 8px;
   background: #c0c0c0;
   border-top: 2px solid #ffffff;
   box-shadow:
@@ -144,46 +306,63 @@ body {
   z-index: 100;
 }
 
+@media (max-width: 768px) {
+  .betpal-taskbar {
+    height: 48px;
+    padding: 4px 8px;
+  }
+}
+
 .betpal-taskbar .betpal-clock {
   margin-left: auto;
   border: 1px solid #808080;
   box-shadow: inset 1px 1px 0 #000;
-  padding: 2px 8px;
+  padding: 4px 10px;
   font-variant-numeric: tabular-nums;
+  font-size: var(--betpal-font-sm);
 }
 
-/* Draggable windows — positioned relative to flow, moved via transform. */
+/* ─── DRAGGABLE WINDOWS ─── */
+
 .betpal-draggable-window {
   width: 100%;
   max-width: var(--betpal-content-max);
-  touch-action: none; /* prevent scroll during drag on mobile */
+  touch-action: none;
 }
 
 .betpal-draggable-window .title-bar {
   cursor: grab;
+  min-height: 28px;
 }
 
 .betpal-draggable-window .title-bar:active {
   cursor: grabbing;
 }
 
-/* Taskbar window buttons */
+/* ─── TASKBAR WINDOW BUTTONS ─── */
+
 .betpal-taskbar-windows {
   display: flex;
-  gap: 2px;
+  gap: 3px;
   flex: 1;
   min-width: 0;
   overflow-x: auto;
 }
 
 .betpal-taskbar-btn {
-  max-width: 160px;
+  max-width: 180px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 2px 8px;
-  font-size: 11px;
+  padding: 4px 10px;
+  font-size: var(--betpal-font-sm);
+  min-height: 26px;
+  transition: background 0.1s;
+}
+
+.betpal-taskbar-btn:hover {
+  background: #d4d4d4;
 }
 
 .betpal-taskbar-btn--active {
@@ -193,7 +372,8 @@ body {
   background: #dfdfdf;
 }
 
-/* Utility for making 98.css fields full-width on mobile. */
+/* ─── FORM STRETCH UTILITY ─── */
+
 .betpal-stretch input[type="text"],
 .betpal-stretch input[type="email"],
 .betpal-stretch input[type="number"],
@@ -201,4 +381,92 @@ body {
 .betpal-stretch select,
 .betpal-stretch textarea {
   width: 100%;
+}
+
+/* ─── INTERACTIVE LIST ITEMS (bets, stakes, search results) ─── */
+
+.betpal-list-item {
+  padding: 8px 10px;
+  border-bottom: 1px solid #dfdfdf;
+  transition: background 0.12s;
+  cursor: pointer;
+}
+
+.betpal-list-item:hover {
+  background: var(--betpal-color-hover-bg);
+}
+
+.betpal-list-item:active {
+  background: var(--betpal-color-active-bg);
+}
+
+.betpal-list-item:last-child {
+  border-bottom: none;
+}
+
+/* ─── STATUS BADGES ─── */
+
+.betpal-status {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: var(--betpal-font-xs);
+  font-weight: 600;
+  border: 1px solid;
+}
+
+.betpal-status--success {
+  color: var(--betpal-color-success);
+  border-color: var(--betpal-color-success);
+  background: #e6f4e6;
+}
+
+.betpal-status--error {
+  color: var(--betpal-color-error);
+  border-color: var(--betpal-color-error);
+  background: #fde8e8;
+}
+
+.betpal-status--warning {
+  color: var(--betpal-color-warning);
+  border-color: var(--betpal-color-warning);
+  background: #fff8e6;
+}
+
+.betpal-status--info {
+  color: var(--betpal-color-link);
+  border-color: var(--betpal-color-link);
+  background: #e6e8ff;
+}
+
+/* ─── ALERT BOXES ─── */
+
+.betpal-alert {
+  padding: var(--betpal-space-md);
+  border: 1px solid;
+  font-size: var(--betpal-font-base);
+  line-height: 1.5;
+}
+
+.betpal-alert--success {
+  color: #004d00;
+  border-color: #006600;
+  background: #e6f4e6;
+}
+
+.betpal-alert--error {
+  color: #800000;
+  border-color: #cc0000;
+  background: #fde8e8;
+}
+
+.betpal-alert--warning {
+  color: #664400;
+  border-color: #cc8800;
+  background: #fff8e6;
+}
+
+.betpal-alert--info {
+  color: #000066;
+  border-color: #000080;
+  background: #e6e8ff;
 }

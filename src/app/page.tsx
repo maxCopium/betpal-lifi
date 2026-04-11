@@ -12,7 +12,7 @@ export default function HomePage() {
   return (
     <Desktop>
       <Window title="BetPal — Welcome.exe">
-        <p style={{ marginTop: 0 }}>
+        <p>
           Bet with friends on Polymarket outcomes. Pooled stakes earn yield
           in a shared group vault until resolution. Zero house edge.
         </p>
@@ -24,14 +24,14 @@ export default function HomePage() {
           </p>
           <LoginButton />
         </fieldset>
-        <fieldset style={{ marginTop: 8 }}>
+        <fieldset style={{ marginTop: 12 }}>
           <legend>Your groups</legend>
           <GroupsHomePanel />
         </fieldset>
       </Window>
 
       <Window title="How it works">
-        <ol style={{ marginTop: 0 }}>
+        <ol style={{ lineHeight: 1.8, paddingLeft: 20 }}>
           <li>Create a group with your friends.</li>
           <li>
             Fund the group from any chain or token (LI.FI Composer routes it

@@ -3,7 +3,6 @@
 /**
  * WithdrawForm — server-side withdrawal from the group's Morpho vault.
  * The server redeems vault shares and sends USDC to the user's wallet.
- * No Safe signatures needed — the custodial group wallet signs everything.
  */
 import { useState } from "react";
 import { authedFetch } from "@/lib/clientFetch";
@@ -55,8 +54,8 @@ export function WithdrawForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-2">
-      <div className="field-row-stacked">
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      <div className="field-row-stacked" style={{ gap: 4 }}>
         <label htmlFor="wd-amount">Amount (USD)</label>
         <input
           id="wd-amount"
@@ -67,9 +66,9 @@ export function WithdrawForm({
         />
       </div>
       {error && (
-        <p className="text-xs" role="alert" style={{ color: "#a00" }}>
+        <div className="betpal-alert betpal-alert--error" role="alert">
           {error}
-        </p>
+        </div>
       )}
       <div>
         <button type="submit" disabled={submitting}>
@@ -77,7 +76,7 @@ export function WithdrawForm({
         </button>
       </div>
       {result && (
-        <p className="text-xs" style={{ color: "#060" }}>
+        <div className="betpal-alert betpal-alert--success">
           Withdrawn ${(result.amountCents / 100).toFixed(2)} to your wallet.
           <br />
           Tx:{" "}
@@ -86,9 +85,9 @@ export function WithdrawForm({
             target="_blank"
             rel="noreferrer"
           >
-            {result.transferTxHash.slice(0, 10)}…
+            {result.transferTxHash.slice(0, 18)}…
           </a>
-        </p>
+        </div>
       )}
     </form>
   );

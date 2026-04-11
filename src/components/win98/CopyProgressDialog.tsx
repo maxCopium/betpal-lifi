@@ -4,20 +4,7 @@
  * CopyProgressDialog — Win98-flavored "Copying funds…" modal.
  *
  * Visual nod to the classic Windows file-copy dialog: animated progress bar,
- * a flying-papers banner, and a labelled status line. Used during the
- * deposit flow to make the cross-chain bridging feel like dragging files
- * between drives.
- *
- * Props:
- *   - open: whether to render the modal
- *   - title: title bar text
- *   - status: current short status (e.g. "Quoting route…", "Bridging…", "Done")
- *   - progress: 0..100; pass undefined for indeterminate (continuously cycling)
- *   - onCancel: optional cancel handler — only shown if provided
- *   - onClose: optional close handler — shown when progress === 100
- *
- * Layout uses Tailwind for positioning only (overlay, sizing). All chrome
- * comes from 98.css (.window, .title-bar, .progress-indicator).
+ * a flying-papers banner, and a labelled status line.
  */
 import { useEffect, useState } from "react";
 
@@ -43,7 +30,6 @@ export function CopyProgressDialog({
   onCancel,
   onClose,
 }: CopyProgressDialogProps) {
-  // For indeterminate mode, cycle a fake bar so the user sees motion.
   const [fake, setFake] = useState(0);
   useEffect(() => {
     if (!open || progress !== undefined) return;
@@ -63,7 +49,7 @@ export function CopyProgressDialog({
       aria-modal="true"
       aria-label={title}
     >
-      <div className="window" style={{ minWidth: 360, maxWidth: 480 }}>
+      <div className="window" style={{ minWidth: 340, maxWidth: 480, width: "92vw" }}>
         <div className="title-bar">
           <div className="title-bar-text">{title}</div>
           <div className="title-bar-controls">
@@ -71,32 +57,31 @@ export function CopyProgressDialog({
           </div>
         </div>
         <div className="window-body">
-          <div className="flex flex-col gap-2">
-            {/* Flying-papers banner — text-only ascii nod, since 98.css ships
-                no bundled icons. */}
+          <div className="flex flex-col gap-3">
+            {/* Flying-papers banner */}
             <div
               className="text-center"
-              style={{ fontFamily: "monospace", fontSize: 24, lineHeight: 1 }}
+              style={{ fontFamily: "monospace", fontSize: 28, lineHeight: 1, padding: "8px 0" }}
               aria-hidden="true"
             >
-              📄 → 💾
+              {done ? "✅" : "📄 → 💾"}
             </div>
-            <div className="text-xs">
-              {fromLabel && toLabel ? (
-                <>
-                  From: <strong>{fromLabel}</strong>
-                  <br />
-                  To: <strong>{toLabel}</strong>
-                </>
-              ) : (
-                status
-              )}
-            </div>
+
+            {fromLabel && toLabel && (
+              <div style={{ lineHeight: 1.6 }}>
+                From: <strong>{fromLabel}</strong>
+                <br />
+                To: <strong>{toLabel}</strong>
+              </div>
+            )}
+
             <div className="progress-indicator segmented" style={{ width: "100%" }}>
               <span className="progress-indicator-bar" style={{ width: `${pct}%` }} />
             </div>
-            <div className="text-xs">{status}</div>
-            <div className="flex gap-2 justify-end">
+
+            <div style={{ minHeight: 20 }}>{status}</div>
+
+            <div className="flex gap-2 justify-end" style={{ paddingTop: 4 }}>
               {onCancel && !done && (
                 <button onClick={onCancel}>Cancel</button>
               )}

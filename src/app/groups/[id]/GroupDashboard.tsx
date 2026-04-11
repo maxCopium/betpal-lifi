@@ -21,9 +21,9 @@ import { useVaultInfo } from "@/hooks/useVaultInfo";
 type GroupRow = {
   id: string;
   name: string;
-  safe_address: string | null; // group wallet address (legacy column name)
+  safe_address: string | null;
   vault_address: string;
-  threshold: number; // cosmetic — kept for DB constraint
+  threshold: number;
   status: string;
   created_at: string;
 };
@@ -141,14 +141,14 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   if (!ready) return <p>Loading…</p>;
   if (!authenticated) {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4" style={{ padding: 16 }}>
         <p>Sign in to view this group.</p>
         <div><button onClick={() => login()}>Sign in</button></div>
       </div>
     );
   }
   if (loading) return <p>Loading group…</p>;
-  if (error) return <p style={{ color: "#a00" }}>{error}</p>;
+  if (error) return <div className="betpal-alert betpal-alert--error">{error}</div>;
   if (!group) return <p>Not found.</p>;
 
   return (
@@ -158,77 +158,76 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
 
       {/* ── Group Info Window ── */}
       <DraggableWindow id="group-info" title={group.name}>
-        <div className="flex flex-col gap-2 text-sm" style={{ padding: 4 }}>
-          <div><strong>Status:</strong> {group.status}</div>
-          <div><strong>Members:</strong> {group.threshold}</div>
+        <div className="flex flex-col gap-3">
+          <div style={{ display: "flex", gap: 16 }}>
+            <div><strong>Status:</strong> {group.status}</div>
+            <div><strong>Members:</strong> {group.threshold}</div>
+          </div>
 
           {/* Vault yield info */}
           {vaultInfo && vaultInfo.apy && (
-            <div style={{
-              background: "#ffffcc",
-              border: "1px solid #e0e000",
-              padding: "4px 6px",
-              fontSize: 11,
-            }}>
-              Your money earns{" "}
-              <strong style={{ color: "#080" }}>
+            <div className="betpal-alert betpal-alert--success" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span>Your money earns</span>
+              <strong style={{ fontSize: 15 }}>
                 {(vaultInfo.apy.total * 100).toFixed(2)}% APY
               </strong>
-              {" "}via {vaultInfo.protocol ?? "Morpho"}
+              <span>via {vaultInfo.protocol ?? "Morpho"}</span>
               {vaultInfo.tvl && (
-                <span style={{ color: "#666" }}>
-                  {" "}· TVL ${vaultInfo.tvl.usd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                <span style={{ opacity: 0.7 }}>
+                  · TVL ${vaultInfo.tvl.usd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                 </span>
               )}
             </div>
           )}
 
           {/* Balance */}
-          <div className="flex items-center justify-between" style={{ marginTop: 4 }}>
-            <strong>Balance</strong>
-            <button onClick={runReconcile} disabled={reconciling} style={{ fontSize: 10 }}>
-              {reconciling ? "Checking…" : "Reconcile"}
-            </button>
-          </div>
-          {balance ? (
-            <ul className="text-xs" style={{ margin: 0, paddingLeft: 16 }}>
-              <li>Your share: {fmtCents(balance.user_balance_cents)}</li>
-              <li>Free (not in bets): {fmtCents(balance.user_free_cents)}</li>
-              <li>Group total: {fmtCents(balance.group_total_cents)}</li>
-            </ul>
-          ) : (
-            <span className="text-xs">Loading…</span>
-          )}
-          {reconcile && (
-            <div className="text-xs" style={{ marginTop: 2 }}>
-              On-chain:{" "}
-              {reconcile.onchain_available && reconcile.onchain_cents !== null
-                ? fmtCents(reconcile.onchain_cents)
-                : "(vault not initialized)"}
-              {reconcile.drift_cents !== null && (
-                <>
-                  {" · drift "}
-                  <span style={{ color: Math.abs(reconcile.drift_cents) > 100 ? "#a00" : "inherit" }}>
-                    {fmtCents(reconcile.drift_cents)}
-                  </span>
-                </>
-              )}
+          <div>
+            <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+              <strong>Balance</strong>
+              <button onClick={runReconcile} disabled={reconciling}>
+                {reconciling ? "Checking…" : "Reconcile"}
+              </button>
             </div>
-          )}
+            {balance ? (
+              <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.8 }}>
+                <li>Your share: <strong>{fmtCents(balance.user_balance_cents)}</strong></li>
+                <li>Free (not in bets): <strong>{fmtCents(balance.user_free_cents)}</strong></li>
+                <li>Group total: <strong>{fmtCents(balance.group_total_cents)}</strong></li>
+              </ul>
+            ) : (
+              <span style={{ opacity: 0.6 }}>Loading…</span>
+            )}
+            {reconcile && (
+              <div style={{ marginTop: 8, padding: "6px 10px", background: "#f0f0f0", border: "1px solid #ccc" }}>
+                On-chain:{" "}
+                {reconcile.onchain_available && reconcile.onchain_cents !== null
+                  ? fmtCents(reconcile.onchain_cents)
+                  : "(vault not initialized)"}
+                {reconcile.drift_cents !== null && (
+                  <>
+                    {" · drift "}
+                    <strong style={{ color: Math.abs(reconcile.drift_cents) > 100 ? "var(--betpal-color-error)" : "inherit" }}>
+                      {fmtCents(reconcile.drift_cents)}
+                    </strong>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Invite */}
-          <div style={{ marginTop: 4 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button onClick={createInvite} disabled={inviting || group.status !== "pending"}>
               {inviting ? "Generating…" : "Invite a friend"}
             </button>
           </div>
           {inviteError && (
-            <p className="text-xs" role="alert" style={{ color: "#a00" }}>{inviteError}</p>
+            <div className="betpal-alert betpal-alert--error" role="alert">{inviteError}</div>
           )}
           {inviteLink && (
-            <div className="text-xs flex flex-col gap-1">
-              <span>Invite link (copied):</span>
-              <code className="break-all">{inviteLink}</code>
+            <div className="betpal-alert betpal-alert--info">
+              <div style={{ marginBottom: 4 }}>Invite link (copied to clipboard):</div>
+              <code className="break-all" style={{ fontSize: 12 }}>{inviteLink}</code>
             </div>
           )}
         </div>
@@ -236,26 +235,22 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
 
       {/* ── Deposit Window ── */}
       <DraggableWindow id="deposit" title="Deposit">
-        <div style={{ padding: 4 }}>
-          <DepositForm groupId={groupId} />
-        </div>
+        <DepositForm groupId={groupId} />
       </DraggableWindow>
 
       {/* ── Withdraw Window ── */}
       <DraggableWindow id="withdraw" title="Withdraw">
-        <div style={{ padding: 4 }}>
-          <WithdrawForm
-            groupId={groupId}
-            onWithdrawn={loadBalance}
-          />
-        </div>
+        <WithdrawForm
+          groupId={groupId}
+          onWithdrawn={loadBalance}
+        />
       </DraggableWindow>
 
       {/* ── Bets Window ── */}
       <DraggableWindow id="bets" title="Bets">
-        <div className="flex flex-col gap-1" style={{ padding: 4 }}>
+        <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <strong>Active Bets</strong>
+            <strong style={{ fontSize: 14 }}>Active Bets</strong>
             <button
               onClick={() => setNewBetOpen(true)}
               disabled={group.status === "closed"}

@@ -39,7 +39,7 @@ export function DepositForm({ groupId }: { groupId: string }) {
 
     const wallet = wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
     if (!wallet) {
-      setLocalError("no wallet available — sign in first");
+      setLocalError("No wallet available — sign in first");
       return;
     }
 
@@ -61,8 +61,8 @@ export function DepositForm({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <form onSubmit={onDeposit} className="flex flex-col gap-2">
-        <div className="field-row-stacked">
+      <form onSubmit={onDeposit} className="flex flex-col gap-3">
+        <div className="field-row-stacked" style={{ gap: 4 }}>
           <label htmlFor="dep-source">Source</label>
           <select
             id="dep-source"
@@ -77,7 +77,7 @@ export function DepositForm({ groupId }: { groupId: string }) {
             ))}
           </select>
         </div>
-        <div className="field-row-stacked">
+        <div className="field-row-stacked" style={{ gap: 4 }}>
           <label htmlFor="dep-amount">Amount (USDC)</label>
           <input
             id="dep-amount"
@@ -88,9 +88,9 @@ export function DepositForm({ groupId }: { groupId: string }) {
           />
         </div>
         {displayError && (
-          <p className="text-xs" role="alert" style={{ color: "#a00" }}>
+          <div className="betpal-alert betpal-alert--error" role="alert">
             {displayError}
-          </p>
+          </div>
         )}
         <div className="flex gap-2">
           <button type="submit">Deposit</button>
@@ -105,18 +105,14 @@ export function DepositForm({ groupId }: { groupId: string }) {
         </div>
 
         {fundingStep === "pending" && (
-          <div className="window" style={{ marginTop: 8 }}>
-            <div className="window-body" style={{ padding: 8 }}>
-              <p className="text-xs" style={{ margin: 0 }}>
-                A wallet window has opened. Add funds there, then click <strong>Done</strong> when finished.
-              </p>
-            </div>
+          <div className="betpal-alert betpal-alert--info" style={{ marginTop: 4 }}>
+            A wallet window has opened. Add funds there, then click <strong>Done</strong> when finished.
           </div>
         )}
         {fundingStep === "done" && (
-          <p className="text-xs" style={{ color: "#080" }}>
+          <div className="betpal-alert betpal-alert--success">
             Funds added. You can now deposit to the group above.
-          </p>
+          </div>
         )}
       </form>
 

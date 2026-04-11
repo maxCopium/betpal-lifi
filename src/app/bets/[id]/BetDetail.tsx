@@ -3,14 +3,6 @@
 /**
  * BetDetail — view a bet, its stakes, and join via deposit-and-bet or
  * stake from existing balance.
- *
- * Sections:
- *   - Header: title, status, deadline, Polymarket link
- *   - Per-outcome stake summary (count, total cents)
- *   - "Join this bet" form:
- *       Primary: deposit & bet in one action (uses useDepositFlow)
- *       Secondary: stake from existing group balance
- *   - "Resolve now" button (only when status=open, deadline passed)
  */
 import { useCallback, useEffect, useState } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
@@ -56,6 +48,20 @@ function fmtCents(c: number) {
   });
 }
 
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
+    ", " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+const STATUS_CLASS: Record<string, string> = {
+  open: "betpal-status--info",
+  locked: "betpal-status--warning",
+  resolving: "betpal-status--warning",
+  settled: "betpal-status--success",
+  voided: "betpal-status--error",
+};
+
 export function BetDetail({ betId }: { betId: string }) {
   const { ready, authenticated, login } = usePrivy();
   const { wallets } = useWallets();
@@ -78,7 +84,6 @@ export function BetDetail({ betId }: { betId: string }) {
       if (!outcome && d.bet.options.length > 0) {
         setOutcome(d.bet.options[0]);
       }
-      // Load cancel vote status.
       try {
         const cv = await authedFetch<{ votes: number; total: number }>(
           `/api/bets/${betId}/cancel-vote`,
@@ -96,7 +101,6 @@ export function BetDetail({ betId }: { betId: string }) {
     void reload();
   }, [ready, authenticated, reload]);
 
-  // Reload bet data after deposit flow completes.
   useEffect(() => {
     if (flow.stakeStatus) void reload();
   }, [flow.stakeStatus, reload]);
@@ -104,15 +108,13 @@ export function BetDetail({ betId }: { betId: string }) {
   if (!ready) return <p>Loading...</p>;
   if (!authenticated) {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4" style={{ padding: 16 }}>
         <p>Sign in to view this bet.</p>
-        <div>
-          <button onClick={() => login()}>Sign in</button>
-        </div>
+        <div><button onClick={() => login()}>Sign in</button></div>
       </div>
     );
   }
-  if (error && !data) return <p style={{ color: "#a00" }}>{error}</p>;
+  if (error && !data) return <div className="betpal-alert betpal-alert--error">{error}</div>;
   if (!data) return <p>Loading bet...</p>;
 
   const { bet, stakes, my_stake } = data;
@@ -141,7 +143,7 @@ export function BetDetail({ betId }: { betId: string }) {
     setError(null);
     const wallet = wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
     if (!wallet) {
-      setError("no wallet available — sign in first");
+      setError("No wallet available — sign in first");
       return;
     }
     await flow.execute({
@@ -161,7 +163,7 @@ export function BetDetail({ betId }: { betId: string }) {
     try {
       const cents = Math.round(parseFloat(amountUsd) * 100);
       if (!Number.isFinite(cents) || cents <= 0) {
-        throw new Error("amount must be > 0");
+        throw new Error("Amount must be > 0");
       }
       await authedFetch(`/api/bets/${betId}/stake`, {
         method: "POST",
@@ -208,101 +210,108 @@ export function BetDetail({ betId }: { betId: string }) {
   const canJoin = !my_stake && bet.status === "open" && !joinPassed;
 
   return (
-    <div className="flex flex-col gap-2 text-sm">
-      <h3 style={{ margin: 0 }}>{bet.title}</h3>
-      <div className="text-xs">
-        <strong>Status:</strong> {bet.status}
-        {bet.resolution_outcome ? ` · won by ${bet.resolution_outcome}` : ""}
-      </div>
-      <div className="text-xs">
-        <strong>Join deadline:</strong>{" "}
-        {new Date(bet.join_deadline).toLocaleString()}
-      </div>
-      <div className="text-xs">
+    <div className="flex flex-col gap-3">
+      {/* Header */}
+      <h3 style={{ margin: 0, fontSize: 16 }}>{bet.title}</h3>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <span className={`betpal-status ${STATUS_CLASS[bet.status] ?? "betpal-status--info"}`}>
+          {bet.status}
+        </span>
+        {bet.resolution_outcome && (
+          <strong style={{ color: "var(--betpal-color-success)" }}>
+            Won by {bet.resolution_outcome}
+          </strong>
+        )}
+        <span style={{ opacity: 0.7 }}>
+          Join by {formatDate(bet.join_deadline)}
+        </span>
         <a href={bet.polymarket_url} target="_blank" rel="noreferrer">
-          View on Polymarket ↗
+          Polymarket ↗
         </a>
       </div>
 
-      <hr style={{ margin: "8px 0" }} />
-      <strong>Pool</strong>
-      <ul className="text-xs" style={{ margin: 0, paddingLeft: 16 }}>
+      {/* Pool breakdown */}
+      <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
+      <strong style={{ fontSize: 14 }}>Pool — {fmtCents(totalCents)}</strong>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {bet.options.map((o) => {
           const b = buckets.get(o)!;
+          const pct = totalCents > 0 ? Math.round((b.cents / totalCents) * 100) : 0;
           return (
-            <li key={o}>
-              <div>
-                {o}: {b.count} stakers · {fmtCents(b.cents)}
+            <div key={o} style={{ padding: "8px 10px", background: "#f5f5f5", border: "1px solid #ddd" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <strong>{o}</strong>
+                <span>{fmtCents(b.cents)} ({pct}%)</span>
+              </div>
+              {/* Visual bar */}
+              <div style={{ height: 6, background: "#ddd", marginBottom: 4 }}>
+                <div style={{ height: "100%", width: `${pct}%`, background: "#000080", transition: "width 0.3s" }} />
               </div>
               {b.stakers.length > 0 && (
-                <ul style={{ margin: 0, paddingLeft: 16 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", opacity: 0.7 }}>
                   {b.stakers.map((s, i) => (
-                    <li key={i}>
-                      {s.label} · {fmtCents(s.cents)}
-                    </li>
+                    <span key={i}>{s.label} · {fmtCents(s.cents)}</span>
                   ))}
-                </ul>
+                </div>
               )}
-            </li>
+            </div>
           );
         })}
-        <li>Total pool: {fmtCents(totalCents)}</li>
-      </ul>
+      </div>
 
+      {/* Your stake */}
       {my_stake && (
         <>
-          <hr style={{ margin: "8px 0" }} />
-          <div className="text-xs">
-            <strong>Your stake:</strong> {fmtCents(my_stake.amount_cents)} on{" "}
-            {my_stake.outcome_chosen}
+          <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
+          <div className="betpal-alert betpal-alert--info">
+            <strong>Your stake:</strong> {fmtCents(my_stake.amount_cents)} on {my_stake.outcome_chosen}
           </div>
         </>
       )}
 
+      {/* Cancel vote */}
       {my_stake && bet.status !== "settled" && bet.status !== "voided" && (
-        <>
-          <hr style={{ margin: "8px 0" }} />
-          <div className="flex items-center gap-2">
-            <button onClick={voteCancelBet} disabled={cancelling}>
-              {cancelling ? "Voting..." : "Vote to cancel bet"}
-            </button>
-            {cancelVotes && (
-              <span className="text-xs">
-                {cancelVotes.votes}/{cancelVotes.total} agreed to cancel
-              </span>
-            )}
-          </div>
-        </>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={voteCancelBet} disabled={cancelling}>
+            {cancelling ? "Voting..." : "Vote to cancel bet"}
+          </button>
+          {cancelVotes && (
+            <span>
+              <strong>{cancelVotes.votes}/{cancelVotes.total}</strong> agreed to cancel
+            </span>
+          )}
+        </div>
       )}
 
+      {/* Join form */}
       {canJoin && (
         <>
-          <hr style={{ margin: "8px 0" }} />
-          <strong>Join this bet</strong>
-          <div className="flex gap-2 text-xs" style={{ marginBottom: 4 }}>
-            <label>
+          <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
+          <strong style={{ fontSize: 14 }}>Join this bet</strong>
+          <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
               <input
                 type="radio"
                 name="join-mode"
                 checked={mode === "deposit"}
                 onChange={() => setMode("deposit")}
-              />{" "}
+              />
               Deposit & bet
             </label>
-            <label>
+            <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
               <input
                 type="radio"
                 name="join-mode"
                 checked={mode === "balance"}
                 onChange={() => setMode("balance")}
-              />{" "}
+              />
               Bet from balance
             </label>
           </div>
 
           {mode === "deposit" ? (
-            <form onSubmit={depositAndBet} className="flex flex-col gap-2">
-              <div className="field-row-stacked">
+            <form onSubmit={depositAndBet} className="flex flex-col gap-3">
+              <div className="field-row-stacked" style={{ gap: 4 }}>
                 <label htmlFor="join-outcome">Outcome</label>
                 <select
                   id="join-outcome"
@@ -314,7 +323,7 @@ export function BetDetail({ betId }: { betId: string }) {
                   ))}
                 </select>
               </div>
-              <div className="field-row-stacked">
+              <div className="field-row-stacked" style={{ gap: 4 }}>
                 <label htmlFor="join-amount">Amount (USDC)</label>
                 <input
                   id="join-amount"
@@ -324,7 +333,7 @@ export function BetDetail({ betId }: { betId: string }) {
                   onChange={(e) => setAmountUsd(e.target.value)}
                 />
               </div>
-              <div className="field-row-stacked">
+              <div className="field-row-stacked" style={{ gap: 4 }}>
                 <label htmlFor="join-source">Source</label>
                 <select
                   id="join-source"
@@ -343,8 +352,8 @@ export function BetDetail({ betId }: { betId: string }) {
               </div>
             </form>
           ) : (
-            <form onSubmit={stakeFromBalance} className="flex flex-col gap-2">
-              <div className="field-row-stacked">
+            <form onSubmit={stakeFromBalance} className="flex flex-col gap-3">
+              <div className="field-row-stacked" style={{ gap: 4 }}>
                 <label htmlFor="bal-outcome">Outcome</label>
                 <select
                   id="bal-outcome"
@@ -356,7 +365,7 @@ export function BetDetail({ betId }: { betId: string }) {
                   ))}
                 </select>
               </div>
-              <div className="field-row-stacked">
+              <div className="field-row-stacked" style={{ gap: 4 }}>
                 <label htmlFor="bal-amount">Amount (USD)</label>
                 <input
                   id="bal-amount"
@@ -376,24 +385,26 @@ export function BetDetail({ betId }: { betId: string }) {
         </>
       )}
 
+      {/* Resolve button */}
       {bet.status === "open" && joinPassed && (
         <>
-          <hr style={{ margin: "8px 0" }} />
-          <div className="flex items-center gap-2">
+          <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <button onClick={tryResolve} disabled={resolving}>
               {resolving ? "Checking Polymarket..." : "Try to resolve"}
             </button>
-            <span className="text-xs">
-              Join deadline passed. Polymarket must be settled before payouts run.
+            <span style={{ opacity: 0.7 }}>
+              Join deadline passed. Polymarket must settle first.
             </span>
           </div>
         </>
       )}
 
+      {/* Errors */}
       {(error || flow.error) && (
-        <p className="text-xs" style={{ color: "#a00" }}>
+        <div className="betpal-alert betpal-alert--error">
           {error || flow.error}
-        </p>
+        </div>
       )}
 
       <CopyProgressDialog

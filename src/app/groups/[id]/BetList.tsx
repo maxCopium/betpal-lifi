@@ -21,6 +21,20 @@ type BetRow = {
   created_at: string;
 };
 
+function formatDeadline(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
+    ", " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+const STATUS_CLASS: Record<string, string> = {
+  open: "betpal-status--info",
+  locked: "betpal-status--warning",
+  resolving: "betpal-status--warning",
+  settled: "betpal-status--success",
+  voided: "betpal-status--error",
+};
+
 export function BetList({
   groupId,
   refreshKey,
@@ -49,35 +63,28 @@ export function BetList({
   }, [groupId, refreshKey]);
 
   if (error) {
-    return (
-      <p className="text-xs" style={{ color: "#a00" }}>
-        {error}
-      </p>
-    );
+    return <div className="betpal-alert betpal-alert--error">{error}</div>;
   }
-  if (bets === null) return <p className="text-xs">Loading bets…</p>;
-  if (bets.length === 0) return <p className="text-xs">No bets yet.</p>;
+  if (bets === null) return <p style={{ opacity: 0.6 }}>Loading bets…</p>;
+  if (bets.length === 0) return <p style={{ opacity: 0.6, fontStyle: "italic" }}>No bets yet.</p>;
 
   return (
     <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
       {bets.map((b) => (
-        <li
-          key={b.id}
-          style={{
-            padding: "4px 0",
-            borderBottom: "1px dotted #888",
-          }}
-        >
-          <Link
-            href={`/bets/${b.id}`}
-            style={{ fontSize: 12, color: "#000080" }}
-          >
+        <li key={b.id} className="betpal-list-item">
+          <Link href={`/bets/${b.id}`} style={{ fontWeight: 500 }}>
             {b.title}
           </Link>
-          <div className="text-xs" style={{ opacity: 0.7 }}>
-            {b.status}
-            {b.resolution_outcome ? ` · ${b.resolution_outcome}` : ""} · join by{" "}
-            {new Date(b.join_deadline).toLocaleString()}
+          <div style={{ marginTop: 4, display: "flex", gap: 8, alignItems: "center" }}>
+            <span className={`betpal-status ${STATUS_CLASS[b.status] ?? "betpal-status--info"}`}>
+              {b.status}
+            </span>
+            {b.resolution_outcome && (
+              <span style={{ fontWeight: 600 }}>{b.resolution_outcome}</span>
+            )}
+            <span style={{ opacity: 0.6 }}>
+              join by {formatDeadline(b.join_deadline)}
+            </span>
           </div>
         </li>
       ))}

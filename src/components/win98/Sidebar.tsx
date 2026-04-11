@@ -7,8 +7,6 @@
  *   - Home (My Computer)
  *   - New Group
  *   - User's groups (expandable, shows bets when on a group/bet page)
- *
- * The tree uses 98.css TreeView styling with folder/file icons.
  */
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
@@ -26,13 +24,11 @@ export function Sidebar() {
   const [bets, setBets] = useState<Record<string, BetSummary[]>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  // Extract current context from URL.
   const groupMatch = pathname.match(/\/groups\/([a-f0-9-]+)/);
   const betMatch = pathname.match(/\/bets\/([a-f0-9-]+)/);
   const activeGroupId = groupMatch?.[1] ?? null;
   const activeBetId = betMatch?.[1] ?? null;
 
-  // Load groups on auth.
   useEffect(() => {
     if (!ready || !authenticated) return;
     let cancelled = false;
@@ -53,7 +49,6 @@ export function Sidebar() {
     return () => { cancelled = true; };
   }, [ready, authenticated]);
 
-  // Auto-expand and load bets for the active group.
   useEffect(() => {
     if (!activeGroupId || !ready || !authenticated) return;
     setExpanded((s) => new Set(s).add(activeGroupId));
@@ -65,14 +60,11 @@ export function Sidebar() {
           `/api/groups/${activeGroupId}/bets`,
         );
         if (!cancelled) setBets((b) => ({ ...b, [activeGroupId]: data.bets }));
-      } catch {
-        // Non-critical.
-      }
+      } catch {}
     })();
     return () => { cancelled = true; };
   }, [activeGroupId, ready, authenticated, bets]);
 
-  // If we're on a bet page, find which group it belongs to.
   useEffect(() => {
     if (!activeBetId || !ready || !authenticated) return;
     let cancelled = false;
@@ -90,9 +82,7 @@ export function Sidebar() {
           );
           if (!cancelled) setBets((b) => ({ ...b, [gid]: bData.bets }));
         }
-      } catch {
-        // Non-critical.
-      }
+      } catch {}
     })();
     return () => { cancelled = true; };
   }, [activeBetId, ready, authenticated, bets]);
@@ -104,7 +94,6 @@ export function Sidebar() {
       else next.add(gid);
       return next;
     });
-    // Lazy-load bets on expand.
     if (!bets[gid] && ready && authenticated) {
       (async () => {
         try {
@@ -112,9 +101,7 @@ export function Sidebar() {
             `/api/groups/${gid}/bets`,
           );
           setBets((b) => ({ ...b, [gid]: data.bets }));
-        } catch {
-          // Non-critical.
-        }
+        } catch {}
       })();
     }
   }
@@ -128,7 +115,7 @@ export function Sidebar() {
         <div className="title-bar">
           <div className="title-bar-text">Explorer</div>
         </div>
-        <div className="window-body" style={{ padding: 4, overflow: "auto" }}>
+        <div className="window-body">
           <ul className="tree-view" style={{ margin: 0 }}>
             {/* Home */}
             <li>
@@ -155,7 +142,9 @@ export function Sidebar() {
             {/* Groups */}
             {groups.length > 0 && (
               <li>
-                <span style={{ opacity: 0.6, fontSize: 10 }}>Groups</span>
+                <span style={{ opacity: 0.5, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Groups
+                </span>
                 <ul>
                   {groups.map((g) => {
                     const isActiveGroup = activeGroupId === g.id;
@@ -165,8 +154,11 @@ export function Sidebar() {
                       <li key={g.id} className={isExpanded ? "" : "collapsed"}>
                         <span
                           onClick={() => toggleGroup(g.id)}
-                          style={{ cursor: "pointer", userSelect: "none" }}
+                          style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 4 }}
                         >
+                          <span style={{ fontSize: 10, transition: "transform 0.15s", transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", display: "inline-block" }}>
+                            ▶
+                          </span>
                           📁{" "}
                           <Link
                             href={`/groups/${g.id}`}
@@ -175,7 +167,7 @@ export function Sidebar() {
                           >
                             {g.name}
                           </Link>
-                          <span style={{ opacity: 0.5, fontSize: 10, marginLeft: 4 }}>
+                          <span className="betpal-status betpal-status--info" style={{ marginLeft: 4 }}>
                             {g.status}
                           </span>
                         </span>
@@ -183,7 +175,7 @@ export function Sidebar() {
                           <ul>
                             {groupBets.length === 0 ? (
                               <li>
-                                <span style={{ opacity: 0.5, fontSize: 10 }}>
+                                <span style={{ opacity: 0.5, fontStyle: "italic" }}>
                                   no bets yet
                                 </span>
                               </li>
@@ -195,16 +187,13 @@ export function Sidebar() {
                                     <Link
                                       href={`/bets/${bet.id}`}
                                       className="betpal-nav-link"
-                                      style={{
-                                        fontWeight: isActiveBet ? 700 : 400,
-                                        fontSize: 11,
-                                      }}
+                                      style={{ fontWeight: isActiveBet ? 700 : 400 }}
                                     >
-                                      📄 {bet.title.length > 30
-                                        ? bet.title.slice(0, 30) + "…"
+                                      📄 {bet.title.length > 35
+                                        ? bet.title.slice(0, 35) + "…"
                                         : bet.title}
                                     </Link>
-                                    <span style={{ opacity: 0.5, fontSize: 10, marginLeft: 4 }}>
+                                    <span className={`betpal-status betpal-status--${bet.status === "settled" ? "success" : bet.status === "voided" ? "error" : "info"}`} style={{ marginLeft: 6 }}>
                                       {bet.status}
                                     </span>
                                   </li>

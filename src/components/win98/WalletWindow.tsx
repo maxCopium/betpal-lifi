@@ -52,45 +52,46 @@ export function WalletWindow() {
       defaultPosition={{ x: 0, y: 0 }}
     >
       {!authenticated ? (
-        <div className="flex flex-col gap-2" style={{ padding: 4 }}>
-          <p className="text-xs">Sign in to view your wallet.</p>
+        <div className="flex flex-col gap-3">
+          <p>Sign in to view your wallet.</p>
           <button onClick={() => login()}>Sign in</button>
         </div>
       ) : !wallet ? (
-        <p className="text-xs" style={{ padding: 4 }}>Loading wallet…</p>
+        <p style={{ opacity: 0.6 }}>Loading wallet…</p>
       ) : (
-        <div className="flex flex-col gap-2" style={{ padding: 4 }}>
+        <div className="flex flex-col gap-3">
           {/* Address */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "#666" }}>Address</span>
-            <code style={{ fontSize: 11 }}>{shortenAddr(wallet.address)}</code>
+          <div className="flex items-center justify-between" style={{ padding: "4px 0", borderBottom: "1px solid #dfdfdf" }}>
+            <span style={{ color: "#666" }}>Address</span>
+            <code style={{ fontSize: 12, letterSpacing: "0.5px" }}>{shortenAddr(wallet.address)}</code>
           </div>
 
           {/* Total balance */}
-          <div
-            style={{
-              textAlign: "center",
-              padding: "6px 0",
-              borderBottom: "1px solid #dfdfdf",
-            }}
-          >
-            <div style={{ fontSize: 18, fontWeight: 700 }}>
+          <div style={{ textAlign: "center", padding: "12px 0" }}>
+            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.5px" }}>
               ${totalUsd.toFixed(2)}
             </div>
-            <div style={{ fontSize: 10, color: "#666" }}>Total balance</div>
+            <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>Total balance</div>
           </div>
 
           {/* Token list */}
           {loading && balances.length === 0 && (
-            <p className="text-xs" style={{ color: "#666" }}>Loading…</p>
+            <p style={{ opacity: 0.6, textAlign: "center" }}>Loading…</p>
           )}
           {!loading && balances.length === 0 && (
-            <p className="text-xs" style={{ color: "#666" }}>
+            <p style={{ opacity: 0.6, textAlign: "center", fontStyle: "italic" }}>
               No funds yet.
             </p>
           )}
           {balances.length > 0 && (
-            <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #ccc" }}>
+                  <th style={{ textAlign: "left", fontWeight: 600, padding: "4px 0" }}>Token</th>
+                  <th style={{ textAlign: "right", fontWeight: 600, padding: "4px 6px" }}>Amount</th>
+                  <th style={{ textAlign: "right", fontWeight: 600, padding: "4px 0" }}>Value</th>
+                </tr>
+              </thead>
               <tbody>
                 {balances.map((t) => {
                   const isStable = ["USDC", "USDbC", "DAI", "USDT"].includes(t.symbol);
@@ -99,14 +100,12 @@ export function WalletWindow() {
                     ? (Number(t.priceUSD) * Number(t.balanceFormatted)).toFixed(2)
                     : null;
                   return (
-                    <tr key={t.address} style={{ borderBottom: "1px solid #dfdfdf" }}>
-                      <td style={{ padding: "2px 0", fontWeight: 600 }}>{t.symbol}</td>
-                      <td style={{ padding: "2px 4px", textAlign: "right" }}>{formatted}</td>
-                      {usdVal && (
-                        <td style={{ padding: "2px 0", textAlign: "right", color: "#666" }}>
-                          ${usdVal}
-                        </td>
-                      )}
+                    <tr key={t.address} style={{ borderBottom: "1px solid #eee" }}>
+                      <td style={{ padding: "6px 0", fontWeight: 600 }}>{t.symbol}</td>
+                      <td style={{ padding: "6px 6px", textAlign: "right" }}>{formatted}</td>
+                      <td style={{ padding: "6px 0", textAlign: "right", color: "#666" }}>
+                        {usdVal ? `$${usdVal}` : "—"}
+                      </td>
                     </tr>
                   );
                 })}
@@ -123,10 +122,7 @@ export function WalletWindow() {
               {loading ? "Loading…" : "Refresh"}
             </button>
           </div>
-          <button
-            onClick={() => window.open("https://home.privy.io/", "betpal_fund")}
-            style={{ fontSize: 10 }}
-          >
+          <button onClick={() => window.open("https://home.privy.io/", "betpal_fund")}>
             Manage wallet
           </button>
         </div>
