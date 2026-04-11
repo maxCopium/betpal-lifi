@@ -1,9 +1,7 @@
 "use client";
 
 /**
- * GroupsHomePanel — the authenticated user's group list, embedded on the home
- * page. Shows a "Create new group" CTA + a list of existing groups with quick
- * links into each. Falls back to a friendly message if not signed in.
+ * GroupsHomePanel — the authenticated user's group list on the home page.
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -45,42 +43,34 @@ export function GroupsHomePanel() {
     };
   }, [ready, authenticated]);
 
-  if (!ready) return <p className="text-xs">Loading…</p>;
+  if (!ready) return <p style={{ opacity: 0.6 }}>Loading…</p>;
   if (!authenticated) {
-    return <p className="text-xs">Sign in to see your groups.</p>;
+    return <p style={{ opacity: 0.6 }}>Sign in to see your groups.</p>;
   }
   if (error) {
-    return (
-      <p className="text-xs" style={{ color: "#a00" }}>
-        {error}
-      </p>
-    );
+    return <div className="betpal-alert betpal-alert--error">{error}</div>;
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <div>
         <Link href="/groups/new">
           <button>+ New group</button>
         </Link>
       </div>
       {groups === null ? (
-        <p className="text-xs">Loading groups…</p>
+        <p style={{ opacity: 0.6 }}>Loading groups…</p>
       ) : groups.length === 0 ? (
-        <p className="text-xs">No groups yet — create one to get started.</p>
+        <p style={{ opacity: 0.6, fontStyle: "italic" }}>No groups yet — create one to get started.</p>
       ) : (
         <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
           {groups.map((g) => (
-            <li key={g.id} style={{ padding: "2px 0" }}>
-              <Link
-                href={`/groups/${g.id}`}
-                style={{ color: "#000080", fontSize: 12 }}
-              >
+            <li key={g.id} className="betpal-list-item">
+              <Link href={`/groups/${g.id}`} style={{ fontWeight: 500 }}>
                 {g.name}
               </Link>
-              <span className="text-xs" style={{ opacity: 0.7 }}>
-                {" "}
-                · {g.status}
+              <span style={{ opacity: 0.6, marginLeft: 8 }}>
+                {g.status}
               </span>
             </li>
           ))}

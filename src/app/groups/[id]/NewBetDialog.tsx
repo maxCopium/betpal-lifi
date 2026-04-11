@@ -2,16 +2,6 @@
 
 /**
  * NewBetDialog — Win98 modal for creating a bet from a Polymarket market.
- *
- * Flow:
- *   1. User types a search query → GET /api/polymarket/search
- *   2. User picks a market from the result list
- *   3. User picks a join deadline (default: 24h from now, capped on the
- *      server to be < market end)
- *   4. POST /api/groups/[id]/bets
- *   5. On success, call onCreated(betId) so the parent can refresh.
- *
- * Search is debounced (~350ms) to keep Polymarket happy.
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -30,7 +20,7 @@ type CreatedBet = { id: string };
 const HOURS_24 = 24 * 60 * 60 * 1000;
 
 function defaultJoinDeadline(): string {
-  return new Date(Date.now() + HOURS_24).toISOString().slice(0, 16); // for datetime-local
+  return new Date(Date.now() + HOURS_24).toISOString().slice(0, 16);
 }
 
 export function NewBetDialog({
@@ -55,7 +45,6 @@ export function NewBetDialog({
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // Load trending markets on open.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -65,14 +54,11 @@ export function NewBetDialog({
           "/api/polymarket/trending?limit=10",
         );
         if (!cancelled) setTrending(data.markets);
-      } catch {
-        // Non-critical — search still works.
-      }
+      } catch {}
     })();
     return () => { cancelled = true; };
   }, [open]);
 
-  // Debounced search.
   useEffect(() => {
     if (!open) return;
     if (!query.trim()) {
@@ -100,7 +86,6 @@ export function NewBetDialog({
     };
   }, [query, open]);
 
-  // Reset state on each open.
   useEffect(() => {
     if (open) {
       setQuery("");
@@ -151,7 +136,7 @@ export function NewBetDialog({
       aria-modal="true"
       aria-label="New bet"
     >
-      <div className="window" style={{ width: 540, maxWidth: "92vw" }}>
+      <div className="window" style={{ width: 560, maxWidth: "94vw" }}>
         <div className="title-bar">
           <div className="title-bar-text">New Bet</div>
           <div className="title-bar-controls">
@@ -159,8 +144,8 @@ export function NewBetDialog({
           </div>
         </div>
         <div className="window-body">
-          <form onSubmit={onSubmit} className="flex flex-col gap-2">
-            <div className="field-row-stacked">
+          <form onSubmit={onSubmit} className="flex flex-col gap-3">
+            <div className="field-row-stacked" style={{ gap: 4 }}>
               <label htmlFor="bet-search">Search Polymarket markets</label>
               <input
                 id="bet-search"
@@ -171,24 +156,22 @@ export function NewBetDialog({
               />
             </div>
 
-            {searching && <p className="text-xs">Searching…</p>}
+            {searching && <p style={{ opacity: 0.6 }}>Searching…</p>}
             {searchError && (
-              <p className="text-xs" style={{ color: "#a00" }}>
-                {searchError}
-              </p>
+              <div className="betpal-alert betpal-alert--error">{searchError}</div>
             )}
 
             <div
               className="sunken-panel"
-              style={{ maxHeight: 200, overflowY: "auto" }}
+              style={{ maxHeight: 260, overflowY: "auto" }}
             >
               {!query.trim() && trending.length > 0 && (
-                <p className="text-xs" style={{ padding: "4px 8px", opacity: 0.6, margin: 0 }}>
+                <p style={{ padding: "6px 10px", opacity: 0.5, margin: 0, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px" }}>
                   Trending on Polymarket
                 </p>
               )}
               {displayList.length === 0 && !searching && (
-                <p className="text-xs" style={{ padding: 8 }}>
+                <p style={{ padding: 12, opacity: 0.6, fontStyle: "italic" }}>
                   {query ? "No matches." : "Loading trending..."}
                 </p>
               )}
@@ -202,20 +185,25 @@ export function NewBetDialog({
                         display: "block",
                         width: "100%",
                         textAlign: "left",
-                        background:
-                          picked?.id === r.id ? "#000080" : "transparent",
+                        background: picked?.id === r.id ? "#000080" : "transparent",
                         color: picked?.id === r.id ? "#fff" : "inherit",
                         border: "none",
-                        padding: "4px 8px",
+                        padding: "8px 10px",
                         cursor: "pointer",
-                        fontSize: 12,
+                        borderBottom: "1px solid #eee",
+                        transition: "background 0.1s",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (picked?.id !== r.id) e.currentTarget.style.background = "rgba(0,0,128,0.06)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (picked?.id !== r.id) e.currentTarget.style.background = "transparent";
                       }}
                     >
                       {r.question}
                       {r.end_date && (
-                        <span style={{ opacity: 0.7 }}>
-                          {" "}
-                          · ends {new Date(r.end_date).toLocaleDateString()}
+                        <span style={{ opacity: 0.7, marginLeft: 8 }}>
+                          ends {new Date(r.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                         </span>
                       )}
                     </button>
@@ -224,7 +212,13 @@ export function NewBetDialog({
               </ul>
             </div>
 
-            <div className="field-row-stacked">
+            {picked && (
+              <div className="betpal-alert betpal-alert--info">
+                <strong>Selected:</strong> {picked.question}
+              </div>
+            )}
+
+            <div className="field-row-stacked" style={{ gap: 4 }}>
               <label htmlFor="bet-deadline">Join deadline</label>
               <input
                 id="bet-deadline"
@@ -234,18 +228,11 @@ export function NewBetDialog({
               />
             </div>
 
-            {picked && (
-              <p className="text-xs" style={{ opacity: 0.8 }}>
-                Selected: {picked.question}
-              </p>
-            )}
             {error && (
-              <p className="text-xs" role="alert" style={{ color: "#a00" }}>
-                {error}
-              </p>
+              <div className="betpal-alert betpal-alert--error" role="alert">{error}</div>
             )}
 
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-2 justify-end" style={{ paddingTop: 4 }}>
               <button type="button" onClick={onClose} disabled={submitting}>
                 Cancel
               </button>

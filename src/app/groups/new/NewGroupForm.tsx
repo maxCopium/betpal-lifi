@@ -2,11 +2,6 @@
 
 /**
  * NewGroupForm — Win98-styled form for creating a betting group.
- *
- * Includes:
- *   - Group name
- *   - Yield strategy picker (powered by LI.FI Earn API)
- *   - Friend search for adding members
  */
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -16,7 +11,7 @@ import { authedFetch } from "@/lib/clientFetch";
 type CreatedGroup = {
   id: string;
   name: string;
-  safe_address: `0x${string}`; // group wallet address (legacy column name)
+  safe_address: `0x${string}`;
   status: string;
 };
 
@@ -66,18 +61,15 @@ export function NewGroupForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Vault picker state.
   const [vaults, setVaults] = useState<VaultOption[]>([]);
   const [vaultsLoading, setVaultsLoading] = useState(false);
   const [selectedVault, setSelectedVault] = useState<VaultOption | null>(null);
 
-  // Friend search state.
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<FriendResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [picked, setPicked] = useState<FriendResult[]>([]);
 
-  // Load vaults from LI.FI Earn API on mount.
   useEffect(() => {
     if (!ready || !authenticated) return;
     let cancelled = false;
@@ -91,16 +83,14 @@ export function NewGroupForm() {
           setVaults(data.vaults);
           if (data.vaults.length > 0) setSelectedVault(data.vaults[0]);
         }
-      } catch {
-        // Non-critical — will fall back to env default.
-      } finally {
+      } catch {}
+      finally {
         if (!cancelled) setVaultsLoading(false);
       }
     })();
     return () => { cancelled = true; };
   }, [ready, authenticated]);
 
-  // Debounced friend search.
   useEffect(() => {
     if (!authenticated) return;
     if (!query.trim() || query.trim().length < 2) {
@@ -133,11 +123,9 @@ export function NewGroupForm() {
   if (!ready) return <p>Loading...</p>;
   if (!authenticated) {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4" style={{ padding: 16 }}>
         <p>You need to sign in before creating a group.</p>
-        <div>
-          <button onClick={() => login()}>Sign in</button>
-        </div>
+        <div><button onClick={() => login()}>Sign in</button></div>
       </div>
     );
   }
@@ -172,8 +160,8 @@ export function NewGroupForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-3">
-      <div className="field-row-stacked">
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      <div className="field-row-stacked" style={{ gap: 4 }}>
         <label htmlFor="group-name">Group name</label>
         <input
           id="group-name"
@@ -190,21 +178,21 @@ export function NewGroupForm() {
       <fieldset>
         <legend>Yield strategy (LI.FI Earn)</legend>
         {vaultsLoading ? (
-          <p className="text-xs">Loading yield opportunities...</p>
+          <p style={{ opacity: 0.6 }}>Loading yield opportunities...</p>
         ) : vaults.length === 0 ? (
-          <p className="text-xs">Using default Morpho USDC vault on Base.</p>
+          <p style={{ opacity: 0.6 }}>Using default Morpho USDC vault on Base.</p>
         ) : (
           <div
             className="sunken-panel"
-            style={{ maxHeight: 180, overflowY: "auto" }}
+            style={{ maxHeight: 200, overflowY: "auto" }}
           >
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ textAlign: "left", borderBottom: "1px solid #808080" }}>
-                  <th style={{ padding: "2px 6px" }}></th>
-                  <th style={{ padding: "2px 6px" }}>Protocol</th>
-                  <th style={{ padding: "2px 6px" }}>APY</th>
-                  <th style={{ padding: "2px 6px" }}>TVL</th>
+                  <th style={{ width: 28 }}></th>
+                  <th>Protocol</th>
+                  <th>APY</th>
+                  <th>TVL</th>
                 </tr>
               </thead>
               <tbody>
@@ -218,9 +206,16 @@ export function NewGroupForm() {
                         cursor: "pointer",
                         background: isSelected ? "#000080" : "transparent",
                         color: isSelected ? "#fff" : "inherit",
+                        transition: "background 0.1s",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) e.currentTarget.style.background = "rgba(0,0,128,0.06)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) e.currentTarget.style.background = "transparent";
                       }}
                     >
-                      <td style={{ padding: "3px 6px", width: 20 }}>
+                      <td style={{ width: 28 }}>
                         <input
                           type="radio"
                           name="vault"
@@ -229,18 +224,18 @@ export function NewGroupForm() {
                           style={{ margin: 0 }}
                         />
                       </td>
-                      <td style={{ padding: "3px 6px" }}>
+                      <td>
                         {v.protocol}
                         {v.name && (
-                          <span style={{ opacity: 0.7, marginLeft: 4 }}>
+                          <span style={{ opacity: 0.7, marginLeft: 6 }}>
                             {v.name.length > 25 ? v.name.slice(0, 25) + "..." : v.name}
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: "3px 6px", fontWeight: 700 }}>
+                      <td style={{ fontWeight: 700 }}>
                         {fmtApy(v.apy)}
                       </td>
-                      <td style={{ padding: "3px 6px", opacity: 0.7 }}>
+                      <td style={{ opacity: 0.7 }}>
                         {fmtTvl(v.tvl_usd)}
                       </td>
                     </tr>
@@ -251,15 +246,14 @@ export function NewGroupForm() {
           </div>
         )}
         {selectedVault && (
-          <p className="text-xs" style={{ marginTop: 4, opacity: 0.8 }}>
-            Idle funds earn {fmtApy(selectedVault.apy)} via {selectedVault.protocol} on{" "}
-            {selectedVault.asset}. Powered by LI.FI Earn.
-          </p>
+          <div className="betpal-alert betpal-alert--success" style={{ marginTop: 8 }}>
+            Idle funds earn <strong>{fmtApy(selectedVault.apy)}</strong> via {selectedVault.protocol} on {selectedVault.asset}. Powered by LI.FI Earn.
+          </div>
         )}
       </fieldset>
 
       {/* Friend search */}
-      <div className="field-row-stacked">
+      <div className="field-row-stacked" style={{ gap: 4 }}>
         <label htmlFor="friend-search">Add friends (optional)</label>
         <input
           id="friend-search"
@@ -271,9 +265,9 @@ export function NewGroupForm() {
         />
       </div>
 
-      {searching && <p className="text-xs">Searching...</p>}
+      {searching && <p style={{ opacity: 0.6 }}>Searching...</p>}
       {results.length > 0 && (
-        <div className="sunken-panel" style={{ maxHeight: 140, overflowY: "auto" }}>
+        <div className="sunken-panel" style={{ maxHeight: 180, overflowY: "auto" }}>
           <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
             {results.map((r) => (
               <li key={r.id}>
@@ -283,15 +277,13 @@ export function NewGroupForm() {
                     setPicked((prev) => [...prev, r]);
                     setResults((prev) => prev.filter((x) => x.id !== r.id));
                   }}
+                  className="betpal-list-item"
                   style={{
                     display: "block",
                     width: "100%",
                     textAlign: "left",
                     background: "transparent",
                     border: "none",
-                    padding: "4px 8px",
-                    cursor: "pointer",
-                    fontSize: 12,
                   }}
                 >
                   {friendLabel(r)}
@@ -303,34 +295,41 @@ export function NewGroupForm() {
       )}
 
       {picked.length > 0 && (
-        <div className="text-xs">
-          <strong>Members:</strong>{" "}
-          {picked.map((p, i) => (
-            <span key={p.id}>
-              {i > 0 && ", "}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+          <strong>Members:</strong>
+          {picked.map((p) => (
+            <span
+              key={p.id}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "2px 8px",
+                background: "#e6e8ff",
+                border: "1px solid #000080",
+              }}
+            >
               {friendLabel(p)}
               <button
                 type="button"
                 onClick={() => setPicked((prev) => prev.filter((x) => x.id !== p.id))}
                 aria-label={`Remove ${friendLabel(p)}`}
-                style={{ marginLeft: 4, padding: "0 4px", fontSize: 10 }}
+                style={{ padding: "0 4px", border: "none", background: "transparent", cursor: "pointer", fontWeight: 700 }}
               >
-                x
+                ×
               </button>
             </span>
           ))}
         </div>
       )}
 
-      <p className="text-xs">
+      <p style={{ opacity: 0.7 }}>
         You&apos;ll be added automatically. People not on BetPal yet can join via
         an invite link after the group is created.
       </p>
 
       {error && (
-        <p className="text-xs" role="alert" style={{ color: "#a00" }}>
-          {error}
-        </p>
+        <div className="betpal-alert betpal-alert--error" role="alert">{error}</div>
       )}
       <div className="flex gap-2">
         <button type="submit" disabled={submitting}>

@@ -50,14 +50,14 @@ export function AcceptInviteForm({ token }: { token: string }) {
   return (
     <div className="flex flex-col gap-3">
       <p>You&apos;ve been invited to join a BetPal group.</p>
-      <p className="text-xs">
+      <p style={{ opacity: 0.7 }}>
         Accepting will add you to the group&apos;s shared betting pool. Your deposits
         earn yield in a Morpho vault while bets are open.
       </p>
       {error && (
-        <p className="text-xs" role="alert" style={{ color: "#a00" }}>
+        <div className="betpal-alert betpal-alert--error" role="alert">
           {error}
-        </p>
+        </div>
       )}
       <div className="flex gap-2">
         <button onClick={onAccept} disabled={submitting}>
