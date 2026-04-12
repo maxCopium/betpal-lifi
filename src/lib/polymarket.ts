@@ -42,7 +42,6 @@ export async function searchMarkets(query: string, limit = 20): Promise<Polymark
   const url = new URL(`${GAMMA}/markets`);
   url.searchParams.set("limit", String(limit));
   url.searchParams.set("closed", "false");
-  url.searchParams.set("active", "true");
   if (query) url.searchParams.set("search", query);
   const res = await fetch(url.toString(), {
     headers: { accept: "application/json" },
