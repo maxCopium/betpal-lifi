@@ -339,19 +339,27 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
             </div>
           )}
 
-          {/* Gas warning */}
+          {/* Server wallet + gas */}
           {gas && gas.needs_funding && (
             <div className="betpal-alert betpal-alert--error" style={{ fontSize: 12 }}>
               <strong>Gas needed:</strong> The group wallet has {gas.balance_eth.toFixed(6)} ETH on Base
-              ({gas.txs_affordable} txs remaining). Send a small amount of ETH to fund payouts:
+              ({gas.txs_affordable} txs remaining). Send Base ETH to enable payouts:
               <code className="break-all" style={{ display: "block", marginTop: 4, fontSize: 11 }}>
                 {gas.wallet_address}
               </code>
             </div>
           )}
           {gas && !gas.needs_funding && (
-            <div style={{ fontSize: 11, opacity: 0.6 }}>
-              Gas: {gas.balance_eth.toFixed(6)} ETH (~{gas.txs_affordable} txs)
+            <div style={{ fontSize: 12 }}>
+              <span style={{ opacity: 0.6 }}>Gas: {gas.balance_eth.toFixed(6)} ETH (~{gas.txs_affordable} txs)</span>
+              {myRole === "owner" && (
+                <details style={{ marginTop: 4 }}>
+                  <summary style={{ cursor: "pointer", fontSize: 11, opacity: 0.6 }}>Group wallet address</summary>
+                  <code className="break-all" style={{ display: "block", marginTop: 2, fontSize: 11 }}>
+                    {gas.wallet_address}
+                  </code>
+                </details>
+              )}
             </div>
           )}
 
