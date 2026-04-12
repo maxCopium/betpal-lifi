@@ -3,6 +3,22 @@ import { PrivyClient } from "@privy-io/server-auth";
 import { env } from "./env";
 import { supabaseService } from "./supabase";
 
+const ADJECTIVES = [
+  "Swift", "Bold", "Lucky", "Chill", "Witty", "Brave", "Slick", "Keen",
+  "Sharp", "Cool", "Wild", "Calm", "Sly", "Rad", "Deft", "Mint",
+];
+const NOUNS = [
+  "Ape", "Fox", "Owl", "Wolf", "Bear", "Hawk", "Shark", "Tiger",
+  "Whale", "Bull", "Cat", "Panda", "Moose", "Otter", "Crow", "Lynx",
+];
+
+function generateUsername(): string {
+  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+  const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+  const num = Math.floor(Math.random() * 100);
+  return `${adj}${noun}${num}`;
+}
+
 let _privy: PrivyClient | null = null;
 function privy(): PrivyClient {
   if (_privy) return _privy;
@@ -46,20 +62,37 @@ export async function requireUser(req: Request): Promise<AuthedUser> {
   }
 
   const sb = supabaseService();
-  // Upsert by privy_id. ON CONFLICT DO UPDATE keeps wallet_address fresh.
-  const { data, error } = await sb
+  // Check if user already exists — upsert would overwrite display_name.
+  const { data: existing } = await sb
     .from("users")
-    .upsert(
-      {
+    .select("id, privy_id, wallet_address, display_name")
+    .eq("privy_id", claims.userId)
+    .maybeSingle();
+
+  let data;
+  if (existing) {
+    // Existing user — only update wallet_address (keep display_name).
+    const { data: updated, error } = await sb
+      .from("users")
+      .update({ wallet_address: wallet.address.toLowerCase() })
+      .eq("privy_id", claims.userId)
+      .select("id, privy_id, wallet_address, display_name")
+      .single();
+    if (error || !updated) throw new HttpError(500, `user update failed: ${error?.message}`);
+    data = updated;
+  } else {
+    // New user — insert with a random display_name.
+    const { data: inserted, error } = await sb
+      .from("users")
+      .insert({
         privy_id: claims.userId,
         wallet_address: wallet.address.toLowerCase(),
-      },
-      { onConflict: "privy_id" },
-    )
-    .select("id, privy_id, wallet_address, display_name")
-    .single();
-  if (error || !data) {
-    throw new HttpError(500, `user upsert failed: ${error?.message}`);
+        display_name: generateUsername(),
+      })
+      .select("id, privy_id, wallet_address, display_name")
+      .single();
+    if (error || !inserted) throw new HttpError(500, `user insert failed: ${error?.message}`);
+    data = inserted;
   }
 
   return {

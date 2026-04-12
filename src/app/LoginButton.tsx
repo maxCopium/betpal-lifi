@@ -1,19 +1,103 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { authedFetch } from "@/lib/clientFetch";
+
+function censorEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!domain) return "****";
+  return `${local.slice(0, 2)}***@${domain[0]}***`;
+}
+
+type MeResponse = {
+  id: string;
+  display_name: string | null;
+  ens_name: string | null;
+  basename: string | null;
+  wallet_address: string;
+};
 
 export function LoginButton() {
   const { ready, authenticated, login, logout, user } = usePrivy();
+  const [hidden, setHidden] = useState(false);
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const loadMe = useCallback(async () => {
+    try {
+      const data = await authedFetch<MeResponse>("/api/me");
+      setMe(data);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => {
+    if (authenticated) void loadMe();
+  }, [authenticated, loadMe]);
+
+  async function saveName() {
+    if (!draft.trim()) return;
+    setSaving(true);
+    try {
+      const data = await authedFetch<MeResponse>("/api/me", {
+        method: "PATCH",
+        body: JSON.stringify({ display_name: draft.trim() }),
+      });
+      setMe(data);
+      setEditing(false);
+    } catch { /* silent */ }
+    setSaving(false);
+  }
 
   if (!ready) return <button disabled>Loading…</button>;
 
   if (authenticated) {
+    const displayName = me?.display_name ?? me?.ens_name ?? me?.basename;
+    const email = user?.email?.address;
+    const wallet = user?.wallet?.address;
+    const identity = hidden
+      ? "****"
+      : displayName
+        ?? (email ? censorEmail(email) : null)
+        ?? (wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "user");
+
     return (
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <span>
-          Signed in as{" "}
-          <strong>{user?.email?.address ?? user?.wallet?.address ?? "user"}</strong>
-        </span>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        {editing ? (
+          <form
+            onSubmit={(e) => { e.preventDefault(); void saveName(); }}
+            style={{ display: "flex", gap: 4, alignItems: "center" }}
+          >
+            <input
+              type="text"
+              placeholder="Pick a username"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              maxLength={30}
+              style={{ width: 140, fontSize: 12 }}
+              autoFocus
+            />
+            <button type="submit" disabled={saving || !draft.trim()} style={{ fontSize: 11 }}>
+              {saving ? "…" : "Save"}
+            </button>
+            {me?.display_name && (
+              <button type="button" onClick={() => setEditing(false)} style={{ fontSize: 11 }}>
+                Cancel
+              </button>
+            )}
+          </form>
+        ) : (
+          <span
+            onClick={() => setHidden((h) => !h)}
+            onDoubleClick={() => setEditing(true)}
+            style={{ cursor: "pointer" }}
+            title="Click to hide · Double-click to edit name"
+          >
+            <strong>{identity}</strong>
+          </span>
+        )}
         <button onClick={logout}>Sign out</button>
       </div>
     );
