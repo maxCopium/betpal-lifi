@@ -42,6 +42,9 @@ export function NewBetDialog({
   const [picked, setPicked] = useState<SearchResult | null>(null);
   const [joinDeadline, setJoinDeadline] = useState(defaultJoinDeadline);
   const [stakeAmountUsd, setStakeAmountUsd] = useState("5");
+  const [maxParticipants, setMaxParticipants] = useState("");
+  const [startWhenFull, setStartWhenFull] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -112,19 +115,27 @@ export function NewBetDialog({
     }
     setSubmitting(true);
     try {
-      const iso = new Date(joinDeadline).toISOString();
       const cents = Math.round(parseFloat(stakeAmountUsd) * 100);
       if (!Number.isFinite(cents) || cents < 100) {
         setError("Stake must be at least $1.00");
         return;
       }
+      const maxP = maxParticipants ? parseInt(maxParticipants, 10) : undefined;
+      const swf = startWhenFull && maxP != null;
+
+      const payload: Record<string, unknown> = {
+        polymarket_market_id: picked.id,
+        stake_amount_cents: cents,
+      };
+      if (!swf || joinDeadline) {
+        payload.join_deadline = new Date(joinDeadline).toISOString();
+      }
+      if (maxP != null && maxP >= 2) payload.max_participants = maxP;
+      if (swf) payload.start_when_full = true;
+
       const bet = await authedFetch<CreatedBet>(`/api/groups/${groupId}/bets`, {
         method: "POST",
-        body: JSON.stringify({
-          polymarket_market_id: picked.id,
-          join_deadline: iso,
-          stake_amount_cents: cents,
-        }),
+        body: JSON.stringify(payload),
       });
       onCreated(bet.id);
       onClose();
@@ -251,6 +262,44 @@ export function NewBetDialog({
             <p style={{ margin: 0, fontSize: 11, opacity: 0.6 }}>
               Everyone pays the same stake. Winners split the pot equally.
             </p>
+
+            <details
+              open={showAdvanced}
+              onToggle={(e) => setShowAdvanced((e.target as HTMLDetailsElement).open)}
+              style={{ fontSize: 12 }}
+            >
+              <summary style={{ cursor: "pointer", opacity: 0.7 }}>Advanced options</summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                <div className="field-row-stacked" style={{ gap: 4 }}>
+                  <label htmlFor="bet-max">Max participants</label>
+                  <input
+                    id="bet-max"
+                    type="number"
+                    min="2"
+                    max="100"
+                    value={maxParticipants}
+                    onChange={(e) => setMaxParticipants(e.target.value)}
+                    placeholder="Unlimited"
+                    style={{ width: 120 }}
+                  />
+                </div>
+                {maxParticipants && parseInt(maxParticipants, 10) >= 2 && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="checkbox"
+                      checked={startWhenFull}
+                      onChange={(e) => setStartWhenFull(e.target.checked)}
+                    />
+                    Start when full (lock bet when all slots fill)
+                  </label>
+                )}
+                {startWhenFull && maxParticipants && (
+                  <p style={{ margin: 0, fontSize: 11, opacity: 0.6 }}>
+                    Bet will lock automatically when {maxParticipants} people have joined. Join deadline is optional as a fallback.
+                  </p>
+                )}
+              </div>
+            </details>
 
             {error && (
               <div className="betpal-alert betpal-alert--error" role="alert">{error}</div>

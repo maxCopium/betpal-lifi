@@ -11,13 +11,12 @@ import { useCallback, useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
 import { DraggableWindow } from "@/components/win98/DraggableWindow";
-import { DepositForm } from "./DepositForm";
 import { WithdrawForm } from "./WithdrawForm";
 import { NewBetDialog } from "./NewBetDialog";
 import { BetList } from "./BetList";
 import { useVaultInfo } from "@/hooks/useVaultInfo";
 import { BASE_CHAIN_ID } from "@/lib/constants";
-import { fmtCents, shortAddr } from "@/lib/format";
+import { fmtCents, fmtApy, shortAddr } from "@/lib/format";
 
 type GroupRow = {
   id: string;
@@ -225,7 +224,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
         `/api/groups/${groupId}/vault-switch`,
         { method: "POST", body: JSON.stringify({ newVaultAddress: newAddr }) },
       );
-      setVaultMessage(`Proposed switch to ${res.new_vault_name} (${res.new_vault_apy?.toFixed(2)}% APY). Waiting for another member to accept.`);
+      setVaultMessage(`Proposed switch to ${res.new_vault_name} (${fmtApy(res.new_vault_apy ?? null)} APY). Waiting for another member to accept.`);
       void loadProposal();
     } catch (e) {
       setVaultMessage(`Proposal failed: ${(e as Error).message}`);
@@ -242,7 +241,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
         `/api/groups/${groupId}/vault-switch/accept`,
         { method: "POST" },
       );
-      setVaultMessage(`Switched to ${res.new_vault_name} (${res.new_vault_apy?.toFixed(2)}% APY). Migrated ${fmtCents(res.usdc_migrated_cents)}.`);
+      setVaultMessage(`Switched to ${res.new_vault_name} (${fmtApy(res.new_vault_apy ?? null)} APY). Migrated ${fmtCents(res.usdc_migrated_cents)}.`);
       window.location.reload();
     } catch (e) {
       setVaultMessage(`Accept failed: ${(e as Error).message}`);
@@ -318,7 +317,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
             <div className="betpal-alert betpal-alert--success" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span>Your money earns</span>
               <strong style={{ fontSize: 15 }}>
-                {vaultInfo.apy.total.toFixed(2)}% APY
+                {fmtApy(vaultInfo.apy.total)} APY
               </strong>
               <span>via {vaultInfo.protocol ?? "Morpho"}</span>
               {vaultInfo.tvl && (
@@ -334,9 +333,18 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
             <div className="betpal-alert betpal-alert--error" style={{ fontSize: 12 }}>
               <strong>Gas needed for payouts!</strong> The group wallet has {gas.balance_eth.toFixed(6)} ETH
               ({gas.txs_affordable} txs remaining). Any member can send a small amount of Base ETH (~$0.50 covers ~100 txs):
-              <code className="break-all" style={{ display: "block", marginTop: 4, fontSize: 11 }}>
-                {gas.wallet_address}
-              </code>
+              <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+                <code className="break-all" style={{ fontSize: 11, flex: 1 }}>
+                  {gas.wallet_address}
+                </code>
+                <button
+                  type="button"
+                  style={{ fontSize: 10, padding: "1px 6px", whiteSpace: "nowrap" }}
+                  onClick={() => navigator.clipboard.writeText(gas.wallet_address)}
+                >
+                  Copy
+                </button>
+              </div>
             </div>
           )}
           {gas && !gas.needs_funding && (
@@ -348,9 +356,18 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
                   <div style={{ opacity: 0.7, marginBottom: 4 }}>
                     Send Base ETH to this address to fund payouts:
                   </div>
-                  <code className="break-all" style={{ display: "block", fontSize: 11 }}>
-                    {gas.wallet_address}
-                  </code>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <code className="break-all" style={{ fontSize: 11, flex: 1 }}>
+                      {gas.wallet_address}
+                    </code>
+                    <button
+                      type="button"
+                      style={{ fontSize: 10, padding: "1px 6px", whiteSpace: "nowrap" }}
+                      onClick={() => navigator.clipboard.writeText(gas.wallet_address)}
+                    >
+                      Copy
+                    </button>
+                  </div>
                 </div>
               </details>
             </div>
@@ -362,7 +379,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
               <strong>Vault switch proposed</strong> by {proposal.proposed_by_name ?? "a member"}
               <div style={{ marginTop: 4 }}>
                 Switch to <strong>{proposal.new_vault_name ?? shortAddr(proposal.new_vault ?? "")}</strong>
-                {proposal.new_vault_apy != null && <> ({proposal.new_vault_apy.toFixed(2)}% APY)</>}
+                {proposal.new_vault_apy != null && <> ({fmtApy(proposal.new_vault_apy)} APY)</>}
               </div>
               <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
                 {proposal.can_accept && (
@@ -395,7 +412,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
               {betterVaults.slice(0, 2).map((v) => (
                 <div key={v.address} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
                   <span>
-                    {v.name ?? "Vault"} ({v.protocol}) — <strong>{v.apy?.toFixed(2)}%</strong> APY
+                    {v.name ?? "Vault"} ({v.protocol}) — <strong>{fmtApy(v.apy ?? null)}</strong> APY
                   </span>
                   <button
                     style={{ fontSize: 11, padding: "2px 8px" }}
@@ -479,15 +496,11 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
         </div>
       </DraggableWindow>
 
-      {/* ── Deposit Window ── */}
-      <DraggableWindow id="deposit" title="Deposit">
-        <DepositForm groupId={groupId} />
-      </DraggableWindow>
-
       {/* ── Withdraw Window ── */}
       <DraggableWindow id="withdraw" title="Withdraw">
         <WithdrawForm
           groupId={groupId}
+          freeBalanceCents={balance?.user_free_cents ?? 0}
           onWithdrawn={loadBalance}
         />
       </DraggableWindow>

@@ -23,6 +23,8 @@ type Bet = {
   polymarket_url: string;
   join_deadline: string;
   max_resolution_date: string;
+  max_participants: number | null;
+  start_when_full: boolean;
   status: string;
   resolution_outcome: string | null;
   settled_at: string | null;
@@ -273,7 +275,8 @@ export function BetDetail({ betId }: { betId: string }) {
     });
   }
 
-  const canJoin = !my_stake && bet.status === "open" && !joinPassed;
+  const isFull = bet.max_participants != null && stakes.length >= bet.max_participants;
+  const canJoin = !my_stake && bet.status === "open" && !joinPassed && !isFull;
 
   return (
     <div className="flex flex-col gap-3">
@@ -289,8 +292,13 @@ export function BetDetail({ betId }: { betId: string }) {
           </strong>
         )}
         <strong>{fmtCents(bet.stake_amount_cents)}/person</strong>
+        {bet.max_participants && (
+          <span>{stakes.length}/{bet.max_participants} slots</span>
+        )}
         <span style={{ opacity: 0.7 }}>
-          Join by {formatDate(bet.join_deadline)}
+          {bet.start_when_full && bet.status === "open"
+            ? `Starts when full${bet.join_deadline ? ` · fallback ${formatDate(bet.join_deadline)}` : ""}`
+            : `Join by ${formatDate(bet.join_deadline)}`}
         </span>
         <a href={bet.polymarket_url} target="_blank" rel="noreferrer">
           Polymarket ↗

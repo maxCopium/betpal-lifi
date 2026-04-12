@@ -36,7 +36,7 @@ export async function POST(
     const sb = supabaseService();
     const { data: bet, error: betErr } = await sb
       .from("bets")
-      .select("id, group_id, options, status, join_deadline, stake_amount_cents, polymarket_market_id")
+      .select("id, group_id, options, status, join_deadline, stake_amount_cents, polymarket_market_id, max_participants, start_when_full")
       .eq("id", betId)
       .maybeSingle();
     if (betErr) throw new HttpError(500, `bet lookup failed: ${betErr.message}`);
@@ -54,6 +54,19 @@ export async function POST(
     }
 
     const stakeAmount = Number(bet.stake_amount_cents);
+    const maxParticipants = bet.max_participants as number | null;
+
+    // Enforce participant cap.
+    if (maxParticipants != null) {
+      const { count, error: countErr } = await sb
+        .from("stakes")
+        .select("id", { count: "exact", head: true })
+        .eq("bet_id", betId);
+      if (countErr) throw new HttpError(500, `stake count failed: ${countErr.message}`);
+      if ((count ?? 0) >= maxParticipants) {
+        throw new HttpError(409, "bet is full — max participants reached");
+      }
+    }
 
     // Membership gate.
     const { data: membership, error: memErr } = await sb
@@ -133,7 +146,24 @@ export async function POST(
       idempotencyKey: `stake_lock:${betId}:${me.id}`,
     });
 
-    return Response.json(stake, { status: 201 });
+    // Auto-lock bet when full (start_when_full mode).
+    let autoLocked = false;
+    if (bet.start_when_full && maxParticipants != null) {
+      const { count } = await sb
+        .from("stakes")
+        .select("id", { count: "exact", head: true })
+        .eq("bet_id", betId);
+      if ((count ?? 0) >= maxParticipants) {
+        await sb
+          .from("bets")
+          .update({ status: "locked", join_deadline: new Date().toISOString() })
+          .eq("id", betId)
+          .eq("status", "open");
+        autoLocked = true;
+      }
+    }
+
+    return Response.json({ ...stake, auto_locked: autoLocked }, { status: 201 });
   } catch (e) {
     return errorResponse(e);
   }

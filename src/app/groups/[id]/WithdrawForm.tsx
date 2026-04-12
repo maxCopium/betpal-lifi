@@ -9,9 +9,11 @@ import { authedFetch } from "@/lib/clientFetch";
 
 export function WithdrawForm({
   groupId,
+  freeBalanceCents,
   onWithdrawn,
 }: {
   groupId: string;
+  freeBalanceCents: number;
   onWithdrawn: () => void;
 }) {
   const [amount, setAmount] = useState("5");
@@ -55,15 +57,28 @@ export function WithdrawForm({
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      <div style={{ fontSize: 13, marginBottom: 2 }}>
+        Available: <strong>${(freeBalanceCents / 100).toFixed(2)}</strong>
+      </div>
       <div className="field-row-stacked" style={{ gap: 4 }}>
         <label htmlFor="wd-amount">Amount (USD)</label>
-        <input
-          id="wd-amount"
-          type="text"
-          inputMode="decimal"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
+        <div style={{ display: "flex", gap: 4 }}>
+          <input
+            id="wd-amount"
+            type="text"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            onClick={() => setAmount((freeBalanceCents / 100).toFixed(2))}
+            style={{ fontSize: 11, padding: "2px 8px" }}
+          >
+            Max
+          </button>
+        </div>
       </div>
       {error && (
         <div className="betpal-alert betpal-alert--error" role="alert">

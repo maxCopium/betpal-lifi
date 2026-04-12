@@ -32,9 +32,13 @@ const CreateBody = z.object({
   /** Optional override; if absent we use the market's `question`. */
   title: z.string().trim().min(1).max(200).optional(),
   /** ISO timestamp; must be in the future and before the market end. */
-  join_deadline: z.string().datetime(),
+  join_deadline: z.string().datetime().optional(),
   /** Fixed stake amount in cents that every participant must pay. */
   stake_amount_cents: z.number().int().min(100).max(1_000_000), // $1 – $10,000
+  /** Optional cap on how many people can join. */
+  max_participants: z.number().int().min(2).max(100).optional(),
+  /** If true and max_participants is set, bet locks when all slots fill. */
+  start_when_full: z.boolean().optional().default(false),
 });
 
 const MAX_RESOLUTION_BUFFER_MS = 14 * 24 * 60 * 60 * 1000;
@@ -92,11 +96,22 @@ export async function POST(
       throw new HttpError(400, "market has no endDate; cannot bound resolution");
     }
     const marketEnd = new Date(market.endDate).getTime();
-    const joinDeadline = new Date(body.join_deadline).getTime();
     const now = Date.now();
-    if (joinDeadline <= now) throw new HttpError(400, "join_deadline must be in the future");
-    if (joinDeadline >= marketEnd) {
-      throw new HttpError(400, "join_deadline must be before the market end");
+
+    // If start_when_full with no explicit deadline, use market end as fallback deadline.
+    const startWhenFull = body.start_when_full && body.max_participants != null;
+    let joinDeadline: number;
+    if (body.join_deadline) {
+      joinDeadline = new Date(body.join_deadline).getTime();
+      if (joinDeadline <= now) throw new HttpError(400, "join_deadline must be in the future");
+      if (joinDeadline >= marketEnd) {
+        throw new HttpError(400, "join_deadline must be before the market end");
+      }
+    } else if (startWhenFull) {
+      // No explicit deadline — use market end as upper bound.
+      joinDeadline = marketEnd;
+    } else {
+      throw new HttpError(400, "join_deadline is required unless start_when_full is set with max_participants");
     }
     const maxResolution = new Date(marketEnd + MAX_RESOLUTION_BUFFER_MS).toISOString();
 
@@ -124,6 +139,8 @@ export async function POST(
         stake_amount_cents: body.stake_amount_cents,
         join_deadline: new Date(joinDeadline).toISOString(),
         max_resolution_date: maxResolution,
+        max_participants: body.max_participants ?? null,
+        start_when_full: startWhenFull,
         status: "open",
       })
       .select(

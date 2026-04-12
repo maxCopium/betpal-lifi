@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
 import { BASE_CHAIN_ID } from "@/lib/constants";
+import { fmtApy } from "@/lib/format";
 
 type CreatedGroup = {
   id: string;
@@ -43,10 +44,6 @@ function friendLabel(f: FriendResult): string {
   );
 }
 
-function fmtApy(apy: number | null): string {
-  if (apy === null) return "-- %";
-  return `${(apy * 100).toFixed(2)}%`;
-}
 
 function fmtTvl(tvl: number | null): string {
   if (tvl === null) return "";

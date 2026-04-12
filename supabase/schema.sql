@@ -105,6 +105,8 @@ create table if not exists bets (
   max_resolution_date   timestamptz not null,
   status                text not null default 'open'
                           check (status in ('open','locked','resolving','settled','voided')),
+  max_participants      integer check (max_participants is null or max_participants >= 2),
+  start_when_full       boolean not null default false,
   resolution_outcome    text,
   resolution_evidence   jsonb,
   settled_at            timestamptz,

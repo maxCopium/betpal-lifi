@@ -24,7 +24,7 @@ export async function GET(
     const { data: bet, error: betErr } = await sb
       .from("bets")
       .select(
-        "id, group_id, creator_id, title, options, stake_amount_cents, polymarket_market_id, polymarket_url, join_deadline, max_resolution_date, status, resolution_outcome, settled_at, created_at",
+        "id, group_id, creator_id, title, options, stake_amount_cents, polymarket_market_id, polymarket_url, join_deadline, max_resolution_date, max_participants, start_when_full, status, resolution_outcome, settled_at, created_at",
       )
       .eq("id", betId)
       .maybeSingle();

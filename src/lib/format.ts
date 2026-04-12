@@ -16,6 +16,12 @@ export function shortAddr(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
+/** Format APY decimal (0.05 = 5%) as percentage string. */
+export function fmtApy(apy: number | null): string {
+  if (apy === null) return "-- %";
+  return `${(apy * 100).toFixed(2)}%`;
+}
+
 /** Format an ISO date to "Apr 12, 3:00 PM" form. */
 export function formatDate(iso: string): string {
   const d = new Date(iso);
