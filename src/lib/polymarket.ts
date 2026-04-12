@@ -39,8 +39,10 @@ const MarketSchema = z
 export type PolymarketMarket = z.infer<typeof MarketSchema>;
 
 export async function searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
-  const url = new URL(`${GAMMA}/markets`);
-  url.searchParams.set("limit", String(limit));
+  // Gamma /markets?search= is unreliable (often ignores query).
+  // Search via /events instead and flatten child markets.
+  const url = new URL(`${GAMMA}/events`);
+  url.searchParams.set("limit", String(Math.min(limit, 20)));
   url.searchParams.set("closed", "false");
   if (query) url.searchParams.set("search", query);
   const res = await fetch(url.toString(), {
@@ -48,11 +50,25 @@ export async function searchMarkets(query: string, limit = 20): Promise<Polymark
     next: { revalidate: 60 },
   });
   if (!res.ok) {
-    throw new Error(`Polymarket /markets failed: ${res.status}`);
+    throw new Error(`Polymarket /events search failed: ${res.status}`);
   }
   const json = await res.json();
-  const arr = Array.isArray(json) ? json : (json.data ?? []);
-  return z.array(MarketSchema).parse(arr);
+  const events = Array.isArray(json) ? json : (json.data ?? []);
+  // Flatten: each event has a `markets` array of child markets.
+  const markets: unknown[] = [];
+  for (const event of events) {
+    const children = Array.isArray(event.markets) ? event.markets : [];
+    if (children.length > 0) {
+      // Add child markets (each is a tradeable market with its own question).
+      for (const m of children) {
+        if (m.closed) continue;
+        // Inherit slug from event if market doesn't have one.
+        if (!m.slug && event.slug) m.slug = event.slug;
+        markets.push(m);
+      }
+    }
+  }
+  return z.array(MarketSchema).parse(markets.slice(0, limit));
 }
 
 export async function trendingMarkets(limit = 10): Promise<PolymarketMarket[]> {
