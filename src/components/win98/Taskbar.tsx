@@ -90,7 +90,7 @@ export function Taskbar() {
       <div style={{ position: "relative" }}>
         <button
           onClick={toggleResolve}
-          title="Resolve mock bets"
+          title="Resolve bets"
           style={{ padding: "4px 10px" }}
         >
           Resolve
@@ -115,7 +115,7 @@ export function Taskbar() {
               </div>
               <div className="window-body" style={{ maxHeight: 320, overflowY: "auto" }}>
                 {bets.length === 0 && (
-                  <p style={{ opacity: 0.6, fontStyle: "italic" }}>No active mock bets.</p>
+                  <p style={{ opacity: 0.6, fontStyle: "italic" }}>No active bets.</p>
                 )}
                 {bets.map((bet) => (
                   <div key={bet.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #dfdfdf" }}>

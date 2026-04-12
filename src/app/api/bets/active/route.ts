@@ -1,13 +1,11 @@
 import "server-only";
 import { errorResponse, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
-import { isMockMarket, getMockMarketData } from "@/lib/polymarket";
-
 /**
  * GET /api/bets/active
  *
- * List active (non-settled) bets the caller participates in, with mock
- * market metadata for the taskbar resolve button.
+ * List active (non-settled) bets the caller participates in.
+ * Used by the taskbar resolve button to allow manual resolution for demos.
  */
 export async function GET(request: Request): Promise<Response> {
   try {
@@ -17,12 +15,11 @@ export async function GET(request: Request): Promise<Response> {
     // Find bets where the user has a stake, that aren't settled/voided.
     const { data, error } = await sb
       .from("stakes")
-      .select("bet_id, bet:bets!inner(id, polymarket_market_id, question, status)")
+      .select("bet_id, bet:bets!inner(id, polymarket_market_id, question, options, status)")
       .eq("user_id", me.id)
       .in("bet.status", ["open", "locked", "resolving"]);
     if (error) throw error;
 
-    // Deduplicate by bet_id and enrich with mock market data.
     const seen = new Set<string>();
     const bets = [];
     for (const row of data ?? []) {
@@ -30,16 +27,12 @@ export async function GET(request: Request): Promise<Response> {
       if (!bet || seen.has(bet.id as string)) continue;
       seen.add(bet.id as string);
 
-      const marketId = bet.polymarket_market_id as string;
-      const mock = isMockMarket(marketId) ? getMockMarketData(marketId) : null;
+      const options = Array.isArray(bet.options) ? bet.options as string[] : ["Yes", "No"];
       bets.push({
         id: bet.id as string,
-        question: (bet.question as string) || mock?.question || marketId,
-        outcomes: mock?.outcomes
-          ? (Array.isArray(mock.outcomes) ? mock.outcomes : JSON.parse(mock.outcomes as string))
-          : ["Yes", "No"],
+        question: (bet.question as string) || (bet.polymarket_market_id as string),
+        outcomes: options,
         status: bet.status as string,
-        isMock: isMockMarket(marketId),
       });
     }
 

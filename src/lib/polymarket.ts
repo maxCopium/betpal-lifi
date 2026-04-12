@@ -149,15 +149,18 @@ export async function getMarket(marketId: string): Promise<PolymarketMarket> {
 export function isMarketSettleable(
   m: PolymarketMarket,
   now: Date = new Date(),
-  /** For mock markets, pass the resolved outcome from the DB. */
+  /** Manual override outcome from DB (set via /api/bets/[id]/mock-resolve). */
   mockResolvedOutcome?: string | null,
 ): { settleable: boolean; winningOutcome?: string; reason?: string } {
-  // Mock markets resolve when the DB flag is set via /api/bets/[id]/mock-resolve.
-  if (isMockMarket(String(m.id))) {
-    if (!mockResolvedOutcome) {
-      return { settleable: false, reason: "mock market not yet resolved" };
-    }
+  // Manual resolution override — works for ANY market (mock or real).
+  // Set via the taskbar resolve button for demo purposes.
+  if (mockResolvedOutcome) {
     return { settleable: true, winningOutcome: mockResolvedOutcome };
+  }
+
+  // Mock markets without manual outcome are not yet resolved.
+  if (isMockMarket(String(m.id))) {
+    return { settleable: false, reason: "mock market not yet resolved" };
   }
 
   if (!m.closed) return { settleable: false, reason: "not closed" };

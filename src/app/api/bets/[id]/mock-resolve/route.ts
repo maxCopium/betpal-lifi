@@ -3,13 +3,13 @@ import { z } from "zod";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { resolveBetIfPossible } from "@/lib/resolveBet";
-import { isMockMarket, getMockMarketData } from "@/lib/polymarket";
 
 /**
  * POST /api/bets/[id]/mock-resolve
  *
- * Manually resolve a mock Polymarket bet for demo purposes.
- * Sets the mock_resolved_outcome on the bet, then triggers resolution.
+ * Manually resolve ANY bet for demo purposes. Works with both real
+ * Polymarket markets and mock markets. Sets mock_resolved_outcome on the
+ * bet, then triggers resolution which uses that outcome directly.
  *
  * Per Next 16 conventions, `params` is a Promise and must be awaited.
  */
@@ -32,35 +32,24 @@ export async function POST(
 
     const sb = supabaseService();
 
-    // Fetch bet and verify it's a mock market.
     const { data: bet, error: betErr } = await sb
       .from("bets")
-      .select("id, polymarket_market_id, status")
+      .select("id, options, status")
       .eq("id", betId)
       .maybeSingle();
     if (betErr) throw new HttpError(500, `bet lookup failed: ${betErr.message}`);
     if (!bet) throw new HttpError(404, "bet not found");
-
-    const marketId = bet.polymarket_market_id as string;
-    if (!isMockMarket(marketId)) {
-      throw new HttpError(400, "not a mock market — cannot manually resolve");
-    }
     if (bet.status === "settled" || bet.status === "voided") {
       throw new HttpError(409, `bet already ${bet.status}`);
     }
 
-    // Validate outcome against market's valid outcomes.
-    const mockData = getMockMarketData(marketId);
-    if (mockData) {
-      const validOutcomes = Array.isArray(mockData.outcomes)
-        ? mockData.outcomes
-        : [];
-      if (validOutcomes.length > 0 && !validOutcomes.includes(body.outcome)) {
-        throw new HttpError(400, `invalid outcome — valid: ${validOutcomes.join(", ")}`);
-      }
+    // Validate outcome against the bet's options.
+    const options = Array.isArray(bet.options) ? bet.options as string[] : [];
+    if (options.length > 0 && !options.includes(body.outcome)) {
+      throw new HttpError(400, `invalid outcome — valid: ${options.join(", ")}`);
     }
 
-    // Set the mock resolved outcome.
+    // Set the manual resolved outcome.
     const { error: updateErr } = await sb
       .from("bets")
       .update({ mock_resolved_outcome: body.outcome })

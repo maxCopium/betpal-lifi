@@ -44,8 +44,10 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   if (status === "settled" || status === "voided") {
     return { kind: "noop", status };
   }
+  const hasManualOutcome = !!(bet.mock_resolved_outcome as string | null);
   const isMock = (bet.polymarket_market_id as string).startsWith("mock:");
-  if (!isMock && new Date(bet.join_deadline as string).getTime() > Date.now()) {
+  // Skip deadline check for manually resolved bets (demo) and mock markets
+  if (!hasManualOutcome && !isMock && new Date(bet.join_deadline as string).getTime() > Date.now()) {
     return { kind: "noop", status: "join deadline not passed" };
   }
 
