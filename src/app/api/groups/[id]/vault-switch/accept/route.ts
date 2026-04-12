@@ -5,6 +5,7 @@ import { sendGroupContractCall } from "@/lib/groupWallet";
 import { basePublicClient } from "@/lib/viem";
 import { getVaultDetail, vaultApy } from "@/lib/earn";
 import { USDC_BASE } from "@/lib/constants";
+import { ERC4626_ABI, ERC20_ABI } from "@/lib/abis";
 
 /**
  * POST /api/groups/:id/vault-switch/accept
@@ -12,47 +13,6 @@ import { USDC_BASE } from "@/lib/constants";
  * Second pair of eyes: a DIFFERENT member accepts the pending vault switch.
  * Executes the on-chain migration: old vault → USDC → new vault.
  */
-
-const ERC4626_ABI = [
-  {
-    type: "function", name: "balanceOf", stateMutability: "view",
-    inputs: [{ type: "address", name: "owner" }],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function", name: "redeem", stateMutability: "nonpayable",
-    inputs: [
-      { type: "uint256", name: "shares" },
-      { type: "address", name: "receiver" },
-      { type: "address", name: "owner" },
-    ],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function", name: "deposit", stateMutability: "nonpayable",
-    inputs: [
-      { type: "uint256", name: "assets" },
-      { type: "address", name: "receiver" },
-    ],
-    outputs: [{ type: "uint256" }],
-  },
-] as const;
-
-const ERC20_ABI = [
-  {
-    type: "function", name: "approve", stateMutability: "nonpayable",
-    inputs: [
-      { type: "address", name: "spender" },
-      { type: "uint256", name: "amount" },
-    ],
-    outputs: [{ type: "bool" }],
-  },
-  {
-    type: "function", name: "balanceOf", stateMutability: "view",
-    inputs: [{ type: "address", name: "account" }],
-    outputs: [{ type: "uint256" }],
-  },
-] as const;
 
 export async function POST(
   request: Request,

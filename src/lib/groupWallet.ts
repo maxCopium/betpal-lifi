@@ -37,7 +37,7 @@ export async function createGroupWallet(): Promise<{
  * Send a transaction from a group's Privy server wallet on Base.
  * Used for vault redemptions, USDC transfers, and gas top-ups.
  */
-export async function sendGroupTransaction(
+async function sendGroupTransaction(
   privyWalletId: string,
   to: `0x${string}`,
   data: `0x${string}`,

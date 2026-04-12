@@ -10,6 +10,7 @@ import { authedFetch } from "@/lib/clientFetch";
 import { CopyProgressDialog } from "@/components/win98/CopyProgressDialog";
 import { useDepositFlow, SOURCES } from "@/hooks/useDepositFlow";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
+import { fmtCents, formatDate } from "@/lib/format";
 
 type Bet = {
   id: string;
@@ -44,18 +45,6 @@ type DetailResponse = {
   my_stake: Stake | null;
 };
 
-function fmtCents(c: number) {
-  return (c / 100).toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-  });
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
-    ", " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-}
 
 const STATUS_CLASS: Record<string, string> = {
   open: "betpal-status--info",

@@ -17,6 +17,7 @@ import { NewBetDialog } from "./NewBetDialog";
 import { BetList } from "./BetList";
 import { useVaultInfo } from "@/hooks/useVaultInfo";
 import { BASE_CHAIN_ID } from "@/lib/constants";
+import { fmtCents, shortAddr } from "@/lib/format";
 
 type GroupRow = {
   id: string;
@@ -82,17 +83,6 @@ type VaultProposal = {
   can_accept?: boolean;
 };
 
-function shortAddr(addr: string): string {
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
-
-function fmtCents(c: number): string {
-  const dollars = c / 100;
-  return dollars.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-  });
-}
 
 export function GroupDashboard({ groupId }: { groupId: string }) {
   const { ready, authenticated, login } = usePrivy();

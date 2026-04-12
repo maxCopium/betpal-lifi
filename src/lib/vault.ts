@@ -2,6 +2,7 @@ import "server-only";
 import { basePublicClient } from "./viem";
 import { sendGroupContractCall } from "./groupWallet";
 import { USDC_BASE, CENTS_TO_USDC_UNITS } from "./constants";
+import { ERC4626_ABI, ERC20_ABI } from "./abis";
 
 /**
  * ERC-4626 vault helpers + on-chain deposit/redeem/transfer.
@@ -9,81 +10,6 @@ import { USDC_BASE, CENTS_TO_USDC_UNITS } from "./constants";
  * Vault address is always per-group (from the DB), never from env.
  * Signing is done via Privy server wallets — no local private keys.
  */
-
-const ERC4626_ABI = [
-  {
-    type: "function",
-    name: "balanceOf",
-    stateMutability: "view",
-    inputs: [{ type: "address", name: "owner" }],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "convertToAssets",
-    stateMutability: "view",
-    inputs: [{ type: "uint256", name: "shares" }],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "convertToShares",
-    stateMutability: "view",
-    inputs: [{ type: "uint256", name: "assets" }],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "deposit",
-    stateMutability: "nonpayable",
-    inputs: [
-      { type: "uint256", name: "assets" },
-      { type: "address", name: "receiver" },
-    ],
-    outputs: [{ type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "redeem",
-    stateMutability: "nonpayable",
-    inputs: [
-      { type: "uint256", name: "shares" },
-      { type: "address", name: "receiver" },
-      { type: "address", name: "owner" },
-    ],
-    outputs: [{ type: "uint256" }],
-  },
-] as const;
-
-const ERC20_ABI = [
-  {
-    type: "function",
-    name: "transfer",
-    stateMutability: "nonpayable",
-    inputs: [
-      { type: "address", name: "to" },
-      { type: "uint256", name: "amount" },
-    ],
-    outputs: [{ type: "bool" }],
-  },
-  {
-    type: "function",
-    name: "approve",
-    stateMutability: "nonpayable",
-    inputs: [
-      { type: "address", name: "spender" },
-      { type: "uint256", name: "amount" },
-    ],
-    outputs: [{ type: "bool" }],
-  },
-  {
-    type: "function",
-    name: "balanceOf",
-    stateMutability: "view",
-    inputs: [{ type: "address", name: "account" }],
-    outputs: [{ type: "uint256" }],
-  },
-] as const;
 
 /**
  * Read the USDC-equivalent value held by `owner` in the vault, in cents.

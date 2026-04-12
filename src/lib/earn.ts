@@ -170,17 +170,3 @@ export async function bestUsdcVaultOnBase(): Promise<{ address: string; name?: s
   return { address: FALLBACK_VAULT };
 }
 
-/** Read a wallet's positions across Earn-indexed vaults. */
-export async function getPortfolio(walletAddress: string): Promise<unknown> {
-  const url = new URL(`${EARN_BASE}/v1/earn/portfolio/${walletAddress}`);
-  const res = await fetch(url.toString(), {
-    headers: { accept: "application/json" },
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(
-      `Earn /portfolio failed: ${res.status} ${body.slice(0, 500)}`,
-    );
-  }
-  return res.json();
-}
