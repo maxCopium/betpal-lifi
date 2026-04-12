@@ -10,24 +10,46 @@ The `safe_address` column in the DB is a **legacy name** — it stores the walle
 The `privy_wallet_id` column stores the Privy wallet ID used for signing.
 Do not introduce Safe/multisig logic or local key derivation.
 
+## On-chain flow
+
+- **Deposits**: User-signed via LI.FI Composer. Composer handles swap + approve + vault.deposit() atomically into the Morpho ERC-4626 vault. Group wallet is the `toAddress`.
+- **Withdrawals/Payouts**: Server-signed via Privy wallet API. `vault.redeem()` → USDC to group wallet → `USDC.transfer()` → user wallet. Both txs signed by Privy server wallet.
+- **Yield**: USDC sits in Morpho the entire time. Yield accrues as extra vault shares. On resolution, winners get principal + their share of yield.
+
+## Betting model
+
+Equal-stakes pari-mutuel. Fixed stake per bet, winners split pool equally. Polymarket is the oracle
+(read resolution status only, never buy positions). Stakes and bets are ledger-only — no on-chain tx
+when placing a bet.
+
+## Resolution
+
+- **Lazy resolution**: Server fires `resolveBetIfPossible()` on bet detail/list GET when past deadline.
+- **Daily cron**: `/api/cron/resolve-bets` as fallback (Vercel Hobby plan limits to daily).
+- **Mock markets**: `mock:` prefix on market_id. Resolved via taskbar button → `POST /api/bets/[id]/mock-resolve`.
+- **Auto-payout**: After resolution, `redeemFromVault()` sends USDC to each winner's wallet. If on-chain fails, ledger credit stands — winner can manually withdraw.
+
+## Key conventions
+
+- All money is integer cents (USD-equivalent), never floats.
+- `balance_events` is append-only and is the source of truth for the ledger.
+- Every event has an `idempotency_key` unique constraint.
+- USDC on Base: 6 decimals. 1 cent = 10,000 base units.
+- Base L2 gas: ~$0.04/tx. Group wallets need dust ETH for gas.
+
 # Known Gaps (see BACKLOG.md for full detail)
 
-## P0 — Nothing works without these
-- **Env vars**: 11 vars in `.env.local` are empty (Privy, Supabase, LI.FI, Morpho vault, cron secret)
-- **Database**: `supabase/schema.sql` not yet applied — run via SQL Editor or `npm run db:apply` (see `supabase/README.md`)
-- **Cron not scheduled**: no `vercel.json` cron config; `/api/cron/resolve-bets` must be triggered manually
+## P0 — Demo blockers
+- **Gas funding**: Group server wallets need Base ETH for on-chain txs
+- **Live smoke test**: No E2E test against deployed app yet
 
-## P1 — Happy path blockers
-- **Phase 3 deposit confirm**: no integration test; a failed confirm leaves a transaction stuck in `executing`
-- **Bet settlement**: `resolveBet.ts` → cron → ledger payouts has zero integration test coverage
-- **Withdrawal reversal**: if on-chain withdrawal fails after ledger debit, reversal is automatic but untested
+## P1 — Untested paths
+- Phase 3 deposit confirm, bet settlement integration, withdrawal reversal
 
 ## P2 — Beta gaps
-- **No integration tests** on deposit state machine, bet settlement, or cron worker
-- **Member list**: `GroupDashboard.tsx` doesn't render members (API supports it)
-- **`earn.ts` stub**: LI.FI Earn wrapper incomplete; `MORPHO_USDC_VAULT_BASE` must be hardcoded
+- No integration tests on API routes
+- `earn.ts` LI.FI Earn wrapper incomplete
 
 ## P3 — Polish
-- Demo mode (`NEXT_PUBLIC_BETPAL_DEMO_MODE`) partially wired
-- Add `vercel.json` with hourly cron for `/api/cron/resolve-bets`
-- Rename `safe_address` DB column to `wallet_address` (cosmetic, requires migration)
+- Demo mode partially wired
+- Rename `safe_address` column to `wallet_address`
