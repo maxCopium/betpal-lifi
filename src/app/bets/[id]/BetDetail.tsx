@@ -331,20 +331,61 @@ export function BetDetail({ betId }: { betId: string }) {
         })}
       </div>
 
-      {/* Your stake */}
-      {my_stake && (
-        <>
-          <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
-          <div className="betpal-alert betpal-alert--info">
-            <strong>Your stake:</strong> {fmtCents(my_stake.amount_cents)} on {my_stake.outcome_chosen}
-            {my_stake.odds_at_stake != null && (
-              <span style={{ marginLeft: 8, opacity: 0.8 }}>
-                (locked at {Math.round(my_stake.odds_at_stake * 100)}% · {(1 / my_stake.odds_at_stake).toFixed(2)}× implied)
-              </span>
-            )}
-          </div>
-        </>
-      )}
+      {/* Your stake + live odds tracker */}
+      {my_stake && (() => {
+        const lockedOdds = my_stake.odds_at_stake;
+        const currentOdds = priceMap.get(my_stake.outcome_chosen);
+        const hasOdds = lockedOdds != null && currentOdds != null;
+        const oddsMovedFor = hasOdds && currentOdds > lockedOdds;  // market moved toward your pick
+        const oddsMovedAgainst = hasOdds && currentOdds < lockedOdds;
+        const shift = hasOdds ? Math.round((currentOdds - lockedOdds) * 100) : 0;
+        return (
+          <>
+            <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
+            <div style={{ padding: "10px 12px", background: "#f0f4ff", border: "1px solid #b0b8d0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: hasOdds ? 8 : 0 }}>
+                <div>
+                  <strong>Your stake:</strong> {fmtCents(my_stake.amount_cents)} on <strong>{my_stake.outcome_chosen}</strong>
+                </div>
+                {lockedOdds != null && (
+                  <span style={{ fontSize: 12, opacity: 0.7 }}>
+                    {(1 / lockedOdds).toFixed(2)}× implied payout weight
+                  </span>
+                )}
+              </div>
+              {hasOdds && (
+                <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ padding: "2px 8px", background: "#e0e0e0", border: "1px solid #bbb", fontSize: 13 }}>
+                      Locked <strong>{Math.round(lockedOdds * 100)}%</strong>
+                    </span>
+                    <span style={{ fontSize: 16 }}>→</span>
+                    <span style={{
+                      padding: "2px 8px",
+                      border: "1px solid",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      background: oddsMovedFor ? "#d4edda" : oddsMovedAgainst ? "#f8d7da" : "#e0e0e0",
+                      borderColor: oddsMovedFor ? "#28a745" : oddsMovedAgainst ? "#dc3545" : "#bbb",
+                    }}>
+                      Now <strong>{Math.round(currentOdds * 100)}%</strong>
+                    </span>
+                  </div>
+                  {shift !== 0 && (
+                    <span style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: oddsMovedFor ? "#28a745" : "#dc3545",
+                    }}>
+                      {shift > 0 ? "+" : ""}{shift}pp {oddsMovedFor ? "in your favor" : "against you"}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Cancel vote */}
       {my_stake && bet.status !== "settled" && bet.status !== "voided" && (
