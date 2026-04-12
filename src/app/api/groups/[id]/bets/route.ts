@@ -3,6 +3,7 @@ import { z } from "zod";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { getMarket, isMockMarket, getMockMarketData } from "@/lib/polymarket";
+import { resolveBetIfPossible } from "@/lib/resolveBet";
 
 /**
  * POST /api/groups/[id]/bets
@@ -164,6 +165,20 @@ export async function GET(
       .eq("group_id", groupId)
       .order("created_at", { ascending: false });
     if (error) throw new HttpError(500, `bet list failed: ${error.message}`);
+
+    // Lazy resolution: fire-and-forget for any past-deadline bets
+    const now = new Date();
+    const resolvableStatuses = ["open", "locked", "resolving"];
+    for (const b of data ?? []) {
+      if (
+        resolvableStatuses.includes(b.status as string) &&
+        new Date(b.join_deadline as string) < now
+      ) {
+        resolveBetIfPossible(b.id as string).catch((err) =>
+          console.warn(`lazy resolve bet ${b.id} failed:`, err.message),
+        );
+      }
+    }
 
     // Enrich with live Polymarket prices (best-effort, parallel)
     const bets = data ?? [];

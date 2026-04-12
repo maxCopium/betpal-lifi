@@ -49,7 +49,7 @@ export function BetList({
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    async function fetchBets() {
       try {
         const data = await authedFetch<{ bets: BetRow[] }>(
           `/api/groups/${groupId}/bets`,
@@ -58,11 +58,32 @@ export function BetList({
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    }
+    void fetchBets();
+    return () => { cancelled = true; };
   }, [groupId, refreshKey]);
+
+  // Poll every 15s if any bet is past deadline and still resolvable.
+  // Server-side lazy resolution + fresh Polymarket prices on each call.
+  useEffect(() => {
+    if (!bets || bets.length === 0) return;
+    const resolvable = ["open", "locked", "resolving"];
+    const now = new Date();
+    const needsPolling = bets.some(
+      (b) => resolvable.includes(b.status) && new Date(b.join_deadline) < now,
+    );
+    if (!needsPolling) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const data = await authedFetch<{ bets: BetRow[] }>(
+          `/api/groups/${groupId}/bets`,
+        );
+        setBets(data.bets);
+      } catch { /* silent */ }
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [bets, groupId]);
 
   if (error) {
     return <div className="betpal-alert betpal-alert--error">{error}</div>;

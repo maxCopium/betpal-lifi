@@ -1,6 +1,7 @@
 import "server-only";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
+import { resolveBetIfPossible } from "@/lib/resolveBet";
 
 /**
  * GET /api/bets/[id]
@@ -73,6 +74,18 @@ export async function GET(
     }));
 
     const myStake = stakes.find((s) => s.user_id === me.id) ?? null;
+
+    // Lazy resolution: if bet is past deadline and still resolvable,
+    // fire resolution in the background. Doesn't block the response.
+    const resolvableStatuses = ["open", "locked", "resolving"];
+    if (
+      resolvableStatuses.includes(bet.status as string) &&
+      new Date(bet.join_deadline as string) < new Date()
+    ) {
+      resolveBetIfPossible(betId).catch((err) =>
+        console.warn(`lazy resolve bet ${betId} failed:`, err.message),
+      );
+    }
 
     return Response.json({ bet, stakes, my_stake: myStake });
   } catch (e) {
