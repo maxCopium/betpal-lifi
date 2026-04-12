@@ -70,6 +70,17 @@ type VaultOption = {
   protocol: string;
 };
 
+type VaultProposal = {
+  pending: boolean;
+  new_vault?: string;
+  new_vault_name?: string;
+  new_vault_apy?: number;
+  proposed_by_name?: string;
+  proposed_by?: string;
+  proposed_at?: string;
+  can_accept?: boolean;
+};
+
 function shortAddr(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
@@ -99,8 +110,9 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   const [myRole, setMyRole] = useState<string | null>(null);
   const [gas, setGas] = useState<GasResponse | null>(null);
   const [betterVaults, setBetterVaults] = useState<VaultOption[]>([]);
-  const [switching, setSwitching] = useState(false);
-  const [switchResult, setSwitchResult] = useState<string | null>(null);
+  const [proposal, setProposal] = useState<VaultProposal | null>(null);
+  const [vaultActionPending, setVaultActionPending] = useState(false);
+  const [vaultMessage, setVaultMessage] = useState<string | null>(null);
   const { info: vaultInfo } = useVaultInfo(8453, group?.vault_address ?? "");
 
   async function runReconcile() {
@@ -181,7 +193,19 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
     return () => { cancelled = true; };
   }, [ready, authenticated, groupId, loadBalance]);
 
-  // Fetch better USDC vaults when current APY is known
+  // Fetch pending proposal + better vaults
+  const loadProposal = useCallback(async () => {
+    try {
+      const p = await authedFetch<VaultProposal>(`/api/groups/${groupId}/vault-switch`);
+      setProposal(p);
+    } catch { /* silent */ }
+  }, [groupId]);
+
+  useEffect(() => {
+    if (!ready || !authenticated) return;
+    void loadProposal();
+  }, [ready, authenticated, loadProposal]);
+
   useEffect(() => {
     if (!vaultInfo?.apy || !group?.vault_address) return;
     let cancelled = false;
@@ -203,27 +227,51 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
     return () => { cancelled = true; };
   }, [vaultInfo, group?.vault_address]);
 
-  async function switchVault(newAddr: string) {
-    setSwitching(true);
-    setSwitchResult(null);
+  async function proposeSwitch(newAddr: string) {
+    setVaultActionPending(true);
+    setVaultMessage(null);
     try {
-      const res = await authedFetch<{
-        new_vault_name: string;
-        new_vault_apy: number;
-        usdc_migrated_cents: number;
-      }>(`/api/groups/${groupId}/vault-switch`, {
-        method: "POST",
-        body: JSON.stringify({ newVaultAddress: newAddr }),
-      });
-      setSwitchResult(
-        `Switched to ${res.new_vault_name} (${res.new_vault_apy?.toFixed(2)}% APY). Migrated ${fmtCents(res.usdc_migrated_cents)}.`,
+      const res = await authedFetch<{ new_vault_name: string; new_vault_apy: number }>(
+        `/api/groups/${groupId}/vault-switch`,
+        { method: "POST", body: JSON.stringify({ newVaultAddress: newAddr }) },
       );
-      // Reload group to pick up new vault_address
+      setVaultMessage(`Proposed switch to ${res.new_vault_name} (${res.new_vault_apy?.toFixed(2)}% APY). Waiting for another member to accept.`);
+      void loadProposal();
+    } catch (e) {
+      setVaultMessage(`Proposal failed: ${(e as Error).message}`);
+    } finally {
+      setVaultActionPending(false);
+    }
+  }
+
+  async function acceptSwitch() {
+    setVaultActionPending(true);
+    setVaultMessage(null);
+    try {
+      const res = await authedFetch<{ new_vault_name: string; new_vault_apy: number; usdc_migrated_cents: number }>(
+        `/api/groups/${groupId}/vault-switch/accept`,
+        { method: "POST" },
+      );
+      setVaultMessage(`Switched to ${res.new_vault_name} (${res.new_vault_apy?.toFixed(2)}% APY). Migrated ${fmtCents(res.usdc_migrated_cents)}.`);
       window.location.reload();
     } catch (e) {
-      setSwitchResult(`Switch failed: ${(e as Error).message}`);
+      setVaultMessage(`Accept failed: ${(e as Error).message}`);
     } finally {
-      setSwitching(false);
+      setVaultActionPending(false);
+    }
+  }
+
+  async function rejectSwitch() {
+    setVaultActionPending(true);
+    setVaultMessage(null);
+    try {
+      await authedFetch(`/api/groups/${groupId}/vault-switch`, { method: "DELETE" });
+      setVaultMessage("Vault switch rejected.");
+      setProposal(null);
+    } catch (e) {
+      setVaultMessage(`Rejection failed: ${(e as Error).message}`);
+    } finally {
+      setVaultActionPending(false);
     }
   }
 
@@ -307,8 +355,40 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
             </div>
           )}
 
-          {/* Better vault available */}
-          {myRole === "owner" && betterVaults.length > 0 && !switching && (
+          {/* Pending vault switch proposal */}
+          {proposal?.pending && (
+            <div className="betpal-alert betpal-alert--info" style={{ fontSize: 12 }}>
+              <strong>Vault switch proposed</strong> by {proposal.proposed_by_name ?? "a member"}
+              <div style={{ marginTop: 4 }}>
+                Switch to <strong>{proposal.new_vault_name ?? shortAddr(proposal.new_vault ?? "")}</strong>
+                {proposal.new_vault_apy != null && <> ({proposal.new_vault_apy.toFixed(2)}% APY)</>}
+              </div>
+              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                {proposal.can_accept && (
+                  <button
+                    onClick={acceptSwitch}
+                    disabled={vaultActionPending}
+                    style={{ fontSize: 11, padding: "2px 8px" }}
+                  >
+                    {vaultActionPending ? "Migrating…" : "Accept"}
+                  </button>
+                )}
+                {!proposal.can_accept && (
+                  <span style={{ opacity: 0.6, fontSize: 11 }}>Waiting for another member…</span>
+                )}
+                <button
+                  onClick={rejectSwitch}
+                  disabled={vaultActionPending}
+                  style={{ fontSize: 11, padding: "2px 8px" }}
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Higher APY vaults — only show if no pending proposal */}
+          {!proposal?.pending && betterVaults.length > 0 && !vaultActionPending && (
             <div className="betpal-alert betpal-alert--info" style={{ fontSize: 12 }}>
               <strong>Higher APY available:</strong>
               {betterVaults.slice(0, 2).map((v) => (
@@ -318,22 +398,24 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
                   </span>
                   <button
                     style={{ fontSize: 11, padding: "2px 8px" }}
-                    onClick={() => switchVault(v.address)}
+                    onClick={() => proposeSwitch(v.address)}
+                    disabled={vaultActionPending}
                   >
-                    Switch
+                    Propose switch
                   </button>
                 </div>
               ))}
+              <div style={{ marginTop: 4, opacity: 0.6, fontSize: 11 }}>
+                A second member must accept the switch before funds migrate.
+              </div>
             </div>
           )}
-          {switching && (
-            <div className="betpal-alert betpal-alert--info">
-              Migrating funds to new vault…
-            </div>
+          {vaultActionPending && !proposal?.pending && (
+            <div className="betpal-alert betpal-alert--info">Processing…</div>
           )}
-          {switchResult && (
-            <div className={`betpal-alert ${switchResult.startsWith("Switch failed") ? "betpal-alert--error" : "betpal-alert--success"}`}>
-              {switchResult}
+          {vaultMessage && (
+            <div className={`betpal-alert ${vaultMessage.includes("failed") ? "betpal-alert--error" : "betpal-alert--success"}`}>
+              {vaultMessage}
             </div>
           )}
 

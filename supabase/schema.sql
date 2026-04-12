@@ -48,10 +48,19 @@ create table if not exists groups (
   status           text not null default 'pending'
                      check (status in ('pending','active','frozen','closed')),
   created_by       uuid not null references users(id),
-  created_at       timestamptz not null default now()
+  created_at       timestamptz not null default now(),
+  -- 4-eye vault switch: one member proposes, another accepts/rejects
+  pending_vault_address    citext,
+  pending_vault_proposed_by uuid references users(id),
+  pending_vault_proposed_at timestamptz
 );
 
 create index if not exists groups_status_idx on groups(status);
+
+-- Migration: add pending vault columns
+alter table groups add column if not exists pending_vault_address citext;
+alter table groups add column if not exists pending_vault_proposed_by uuid references users(id);
+alter table groups add column if not exists pending_vault_proposed_at timestamptz;
 
 -- =============================================================================
 -- GROUP_MEMBERS  (many-to-many)
