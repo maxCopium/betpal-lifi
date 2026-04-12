@@ -62,6 +62,18 @@ export async function addBalanceEvent(
   if (!Number.isInteger(input.deltaCents)) {
     throw new Error("deltaCents must be an integer");
   }
+  // Guard against overdraw: if this is a debit, verify the user's total
+  // balance won't go negative. Skip for system-level adjustments that are
+  // part of atomic reserve/reverse pairs (withdrawals, auto-payouts).
+  if (input.deltaCents < 0 && input.reason !== "adjustment") {
+    const currentBalance = await getUserGroupBalanceCents(input.groupId, input.userId);
+    if (currentBalance + input.deltaCents < 0) {
+      throw new Error(
+        `overdraw prevented: user has ${currentBalance} cents, debit of ${input.deltaCents} would go negative ` +
+        `(key: ${input.idempotencyKey})`,
+      );
+    }
+  }
   const sb = supabaseService();
   const { data, error } = await sb
     .from("balance_events")

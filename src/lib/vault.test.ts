@@ -11,10 +11,12 @@ vi.mock("server-only", () => ({}));
 
 // Mock viem public client
 const mockReadContract = vi.fn();
+const mockGetBalance = vi.fn().mockResolvedValue(BigInt(1_000_000_000_000_000)); // 0.001 ETH — plenty of gas
 const mockWaitForTransactionReceipt = vi.fn().mockResolvedValue({});
 vi.mock("./viem", () => ({
   basePublicClient: () => ({
     readContract: mockReadContract,
+    getBalance: mockGetBalance,
     waitForTransactionReceipt: mockWaitForTransactionReceipt,
   }),
 }));
@@ -25,7 +27,7 @@ vi.mock("./groupWallet", () => ({
   sendGroupContractCall: (...args: any[]) => mockSendGroupContractCall(...args),
 }));
 
-import { getVaultBalanceCents, redeemFromVault } from "./vault";
+import { getVaultBalanceCents, redeemFromVault, PartialRedeemError } from "./vault";
 import { CENTS_TO_USDC_UNITS } from "./constants";
 
 beforeEach(() => {
@@ -123,5 +125,57 @@ describe("redeemFromVault", () => {
     expect(mockSendGroupContractCall.mock.calls[1][3]).toBe("transfer");
     expect(result.redeemTxHash).toBe("0xredeem");
     expect(result.transferTxHash).toBe("0xtransfer");
+  });
+
+  it("throws on insufficient gas", async () => {
+    mockGetBalance.mockResolvedValueOnce(BigInt(100)); // nearly zero ETH
+
+    await expect(
+      redeemFromVault(
+        "privy-wallet-1",
+        "0xvault",
+        "0xwallet",
+        100,
+        "0xrecipient",
+      ),
+    ).rejects.toThrow("insufficient gas");
+  });
+
+  it("throws PartialRedeemError when transfer fails after redeem", async () => {
+    mockReadContract.mockResolvedValueOnce(BigInt(1000)); // convertToShares
+    mockSendGroupContractCall
+      .mockResolvedValueOnce("0xredeem" as `0x${string}`) // redeem succeeds
+      .mockRejectedValueOnce(new Error("transfer failed")) // first transfer fails
+      .mockRejectedValueOnce(new Error("transfer failed")); // retry also fails
+
+    await expect(
+      redeemFromVault(
+        "privy-wallet-1",
+        "0xvault",
+        "0xwallet",
+        100,
+        "0xrecipient",
+      ),
+    ).rejects.toThrow(PartialRedeemError);
+  });
+
+  it("retries transfer once on failure", async () => {
+    mockReadContract.mockResolvedValueOnce(BigInt(1000)); // convertToShares
+    mockSendGroupContractCall
+      .mockResolvedValueOnce("0xredeem" as `0x${string}`) // redeem
+      .mockRejectedValueOnce(new Error("nonce too low")) // first transfer fails
+      .mockResolvedValueOnce("0xtransfer" as `0x${string}`); // retry succeeds
+
+    const result = await redeemFromVault(
+      "privy-wallet-1",
+      "0xvault",
+      "0xwallet",
+      100,
+      "0xrecipient",
+    );
+
+    expect(result.transferTxHash).toBe("0xtransfer");
+    // 3 calls: redeem + failed transfer + successful retry
+    expect(mockSendGroupContractCall).toHaveBeenCalledTimes(3);
   });
 });

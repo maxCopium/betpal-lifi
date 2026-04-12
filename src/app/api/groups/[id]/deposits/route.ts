@@ -61,7 +61,14 @@ function quoteToAmountCents(quote: LifiQuote): number {
       "Composer quote missing toAmountUSD — cannot derive ledger cents from vault share units",
     );
   }
-  return Math.floor(parseFloat(quote.estimate.toAmountUSD) * 100);
+  const usd = parseFloat(quote.estimate.toAmountUSD);
+  if (!Number.isFinite(usd) || usd < 0) {
+    throw new Error(`Composer toAmountUSD is invalid: ${quote.estimate.toAmountUSD}`);
+  }
+  if (usd > 1_000_000) {
+    throw new Error(`Composer toAmountUSD suspiciously large: $${usd} — rejecting`);
+  }
+  return Math.floor(usd * 100);
 }
 
 export async function POST(

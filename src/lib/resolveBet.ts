@@ -3,7 +3,7 @@ import { supabaseService } from "./supabase";
 import { addBalanceEvent, getGroupTotalCents } from "./ledger";
 import { computePayouts, type Stake } from "./payouts";
 import { getMarket, isMarketSettleable } from "./polymarket";
-import { getVaultBalanceCents, redeemFromVault } from "./vault";
+import { getVaultBalanceCents, redeemFromVault, PartialRedeemError } from "./vault";
 
 /**
  * Core bet-resolution logic. Shared by the user-triggered resolve route and
@@ -282,7 +282,25 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
         idempotencyKey: `auto_payout:${betId}:${p.userId}`,
       });
     } catch (e) {
-      console.warn(`auto-payout failed for ${p.userId}:`, (e as Error).message);
+      if (e instanceof PartialRedeemError) {
+        // Vault shares already redeemed — USDC is in group wallet.
+        // Write the debit event to prevent re-redeeming on any retry.
+        // The USDC sits in the group wallet until manual recovery.
+        console.error(
+          `PARTIAL REDEEM for ${p.userId} on bet ${betId}: ${e.message}. ` +
+          `USDC is in group wallet — needs manual transfer.`,
+        );
+        await addBalanceEvent({
+          groupId,
+          userId: p.userId,
+          deltaCents: -p.amountCents,
+          reason: "adjustment",
+          betId,
+          idempotencyKey: `auto_payout:${betId}:${p.userId}`,
+        });
+      } else {
+        console.warn(`auto-payout failed for ${p.userId}:`, (e as Error).message);
+      }
     }
   }
 

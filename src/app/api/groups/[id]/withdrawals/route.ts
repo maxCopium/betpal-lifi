@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { addBalanceEvent, getUserFreeBalanceCents } from "@/lib/ledger";
-import { redeemFromVault } from "@/lib/vault";
+import { redeemFromVault, PartialRedeemError } from "@/lib/vault";
 import { BASE_CHAIN_ID } from "@/lib/constants";
 
 /**
@@ -131,7 +131,26 @@ export async function POST(
         { status: 201 },
       );
     } catch (chainErr) {
-      // On-chain failure: reverse the ledger reservation.
+      if (chainErr instanceof PartialRedeemError) {
+        // Vault shares redeemed but USDC transfer failed — do NOT reverse
+        // the ledger reservation because the USDC is out of the vault.
+        // It's sitting in the group wallet; manual transfer can recover it.
+        await sb
+          .from("transactions")
+          .update({
+            status: "partial",
+            tx_hash: chainErr.redeemTxHash,
+            error_message: chainErr.message,
+          })
+          .eq("id", withdrawalId);
+
+        throw new HttpError(
+          502,
+          `vault redeemed but transfer failed — USDC is in group wallet. ${chainErr.message}`,
+        );
+      }
+
+      // Full failure (redeem never happened): reverse the ledger reservation.
       await addBalanceEvent({
         groupId,
         userId: me.id,
