@@ -93,16 +93,6 @@ export async function POST(
       throw new HttpError(403, "you proposed this switch — a different member must accept");
     }
 
-    // No active bets (re-check at execution time)
-    const { count: activeBets } = await sb
-      .from("bets")
-      .select("id", { count: "exact", head: true })
-      .eq("group_id", groupId)
-      .in("status", ["open", "locked", "resolving"]);
-    if (activeBets && activeBets > 0) {
-      throw new HttpError(409, "cannot switch vaults while bets are active");
-    }
-
     const oldVault = (group.vault_address as string).toLowerCase() as `0x${string}`;
     const newVault = (group.pending_vault_address as string).toLowerCase() as `0x${string}`;
     const walletId = group.privy_wallet_id as string;

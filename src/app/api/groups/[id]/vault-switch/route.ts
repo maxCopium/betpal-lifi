@@ -52,16 +52,6 @@ export async function POST(
     const sb = supabaseService();
     await requireMembership(sb, groupId, me.id);
 
-    // No active bets
-    const { count: activeBets } = await sb
-      .from("bets")
-      .select("id", { count: "exact", head: true })
-      .eq("group_id", groupId)
-      .in("status", ["open", "locked", "resolving"]);
-    if (activeBets && activeBets > 0) {
-      throw new HttpError(409, "cannot switch vaults while bets are active");
-    }
-
     // Load group
     const { data: group } = await sb
       .from("groups")
