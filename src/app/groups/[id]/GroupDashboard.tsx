@@ -207,7 +207,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
             <div className="betpal-alert betpal-alert--success" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span>Your money earns</span>
               <strong style={{ fontSize: 15 }}>
-                {(vaultInfo.apy.total * 100).toFixed(2)}% APY
+                {vaultInfo.apy.total.toFixed(2)}% APY
               </strong>
               <span>via {vaultInfo.protocol ?? "Morpho"}</span>
               {vaultInfo.tvl && (
@@ -237,18 +237,24 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
             )}
             {reconcile && (
               <div style={{ marginTop: 8, padding: "6px 10px", background: "#f0f0f0", border: "1px solid #ccc" }}>
-                On-chain:{" "}
-                {reconcile.onchain_available && reconcile.onchain_cents !== null
-                  ? fmtCents(reconcile.onchain_cents)
-                  : "(vault not initialized)"}
-                {reconcile.drift_cents !== null && (
-                  <>
-                    {" · drift "}
-                    <strong style={{ color: Math.abs(reconcile.drift_cents) > 100 ? "var(--betpal-color-error)" : "inherit" }}>
-                      {fmtCents(reconcile.drift_cents)}
-                    </strong>
-                  </>
-                )}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>
+                    On-chain:{" "}
+                    {reconcile.onchain_available && reconcile.onchain_cents !== null
+                      ? fmtCents(reconcile.onchain_cents)
+                      : "(vault not initialized)"}
+                  </span>
+                  {reconcile.drift_cents !== null && reconcile.drift_cents > 0 && (
+                    <span style={{ color: "#2e7d32", fontWeight: "bold" }}>
+                      +{fmtCents(reconcile.drift_cents)} yield earned
+                    </span>
+                  )}
+                  {reconcile.drift_cents !== null && reconcile.drift_cents < 0 && (
+                    <span style={{ color: "var(--betpal-color-error)" }}>
+                      {fmtCents(reconcile.drift_cents)} drift
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
