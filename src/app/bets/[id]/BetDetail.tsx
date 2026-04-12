@@ -66,6 +66,17 @@ export function BetDetail({ betId }: { betId: string }) {
   const [resolving, setResolving] = useState(false);
   const [cancelVotes, setCancelVotes] = useState<{ votes: number; total: number } | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [forceResolve, setForceResolve] = useState<{
+    pending: boolean;
+    outcome?: string;
+    proposed_by?: string;
+    proposed_by_name?: string;
+    votes?: number;
+    total?: number;
+    voterIds?: string[];
+  } | null>(null);
+  const [forceOutcome, setForceOutcome] = useState("");
+  const [forceSubmitting, setForceSubmitting] = useState(false);
   const flow = useDepositFlow();
   const marketPrices = useMarketPrices(betId, data?.bet.status);
 
@@ -81,6 +92,12 @@ export function BetDetail({ betId }: { betId: string }) {
           `/api/bets/${betId}/cancel-vote`,
         );
         setCancelVotes(cv);
+      } catch { /* ignore */ }
+      try {
+        const fr = await authedFetch<typeof forceResolve>(
+          `/api/bets/${betId}/force-resolve`,
+        );
+        setForceResolve(fr);
       } catch { /* ignore */ }
     } catch (e) {
       setError((e as Error).message);
@@ -182,6 +199,55 @@ export function BetDetail({ betId }: { betId: string }) {
       setError((e as Error).message);
     } finally {
       setCancelling(false);
+    }
+  }
+
+  async function proposeForceResolve(outcomeToForce: string) {
+    setForceSubmitting(true);
+    setError(null);
+    try {
+      const res = await authedFetch<{ status: string; votes: number; total: number }>(
+        `/api/bets/${betId}/force-resolve`,
+        { method: "POST", body: JSON.stringify({ outcome: outcomeToForce }) },
+      );
+      if (res.status === "resolved") await reload();
+      else {
+        setForceResolve({ pending: true, outcome: outcomeToForce, votes: res.votes, total: res.total });
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setForceSubmitting(false);
+    }
+  }
+
+  async function acceptForceResolve() {
+    setForceSubmitting(true);
+    setError(null);
+    try {
+      const res = await authedFetch<{ status: string; votes: number; total: number }>(
+        `/api/bets/${betId}/force-resolve`,
+        { method: "POST", body: JSON.stringify({ accept: true }) },
+      );
+      if (res.status === "resolved") await reload();
+      else await reload();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setForceSubmitting(false);
+    }
+  }
+
+  async function rejectForceResolve() {
+    setForceSubmitting(true);
+    setError(null);
+    try {
+      await authedFetch(`/api/bets/${betId}/force-resolve`, { method: "DELETE" });
+      setForceResolve({ pending: false });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setForceSubmitting(false);
     }
   }
 
@@ -387,6 +453,51 @@ export function BetDetail({ betId }: { betId: string }) {
             </span>
           )}
         </div>
+      )}
+
+      {/* Force resolve */}
+      {my_stake && bet.status !== "settled" && bet.status !== "voided" && (
+        <>
+          <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
+          {forceResolve?.pending ? (
+            <div style={{ padding: "10px 12px", background: "#fff8e1", border: "1px solid #ffe082" }}>
+              <strong>Force resolve proposed:</strong> <strong>{forceResolve.outcome}</strong>
+              {forceResolve.proposed_by_name && (
+                <span style={{ opacity: 0.7 }}> by {forceResolve.proposed_by_name}</span>
+              )}
+              <div style={{ marginTop: 6 }}>
+                <strong>{forceResolve.votes}/{forceResolve.total}</strong> agreed
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button onClick={acceptForceResolve} disabled={forceSubmitting}>
+                  {forceSubmitting ? "..." : "Accept"}
+                </button>
+                <button onClick={rejectForceResolve} disabled={forceSubmitting}>
+                  Reject
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <strong style={{ fontSize: 13 }}>Force resolve</strong>
+              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                {bet.options.map((o) => (
+                  <button
+                    key={o}
+                    disabled={forceSubmitting}
+                    onClick={() => proposeForceResolve(o)}
+                    style={{ padding: "4px 14px" }}
+                  >
+                    {forceSubmitting ? "..." : o}
+                  </button>
+                ))}
+              </div>
+              <span style={{ opacity: 0.6, fontSize: 12 }}>
+                All participants must agree to force resolve.
+              </span>
+            </div>
+          )}
+        </>
       )}
 
       {/* Join form */}

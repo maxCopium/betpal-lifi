@@ -160,9 +160,41 @@ describe("resolveBet — payout computation", () => {
 });
 
 describe("resolveBet — mock market resolution", () => {
-  it("mock market is not settleable without mockResolvedOutcome", async () => {
-    const { isMarketSettleable } = await import("./polymarket");
-    // Call the real function (not mocked for this test)
+  it("any market is not settleable without manual override and not closed", async () => {
+    const { isMarketSettleable: realFn } = await vi.importActual<typeof import("./polymarket")>("./polymarket");
+    const result = realFn(
+      {
+        id: "some-real-market",
+        question: "Real market",
+        outcomes: ["Yes", "No"],
+        closed: false,
+        active: true,
+      },
+      new Date(),
+      undefined,
+    );
+    expect(result.settleable).toBe(false);
+    expect(result.reason).toBe("not closed");
+  });
+
+  it("any market is settleable with manual override (force resolve)", async () => {
+    const { isMarketSettleable: realFn } = await vi.importActual<typeof import("./polymarket")>("./polymarket");
+    const result = realFn(
+      {
+        id: "some-real-market",
+        question: "Real market",
+        outcomes: ["Yes", "No"],
+        closed: false,
+        active: true,
+      },
+      new Date(),
+      "Yes",
+    );
+    expect(result.settleable).toBe(true);
+    expect(result.winningOutcome).toBe("Yes");
+  });
+
+  it("mock market without manual outcome is not settleable", async () => {
     const { isMarketSettleable: realFn } = await vi.importActual<typeof import("./polymarket")>("./polymarket");
     const result = realFn(
       {
@@ -177,23 +209,6 @@ describe("resolveBet — mock market resolution", () => {
     );
     expect(result.settleable).toBe(false);
     expect(result.reason).toBe("mock market not yet resolved");
-  });
-
-  it("mock market is settleable with mockResolvedOutcome", async () => {
-    const { isMarketSettleable: realFn } = await vi.importActual<typeof import("./polymarket")>("./polymarket");
-    const result = realFn(
-      {
-        id: "mock:demo",
-        question: "Demo",
-        outcomes: ["Yes", "No"],
-        closed: false,
-        active: true,
-      },
-      new Date(),
-      "Yes",
-    );
-    expect(result.settleable).toBe(true);
-    expect(result.winningOutcome).toBe("Yes");
   });
 });
 
