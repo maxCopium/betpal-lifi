@@ -41,7 +41,7 @@ body {
 }
 
 body {
-  background: var(--betpal-desktop-bg);
+  background: var(--betpal-desktop-bg) url("/win98-bg.webp") center center / cover no-repeat fixed;
   font-family:
     "Pixelated MS Sans Serif", "MS Sans Serif", "Microsoft Sans Serif",
     Tahoma, sans-serif;
