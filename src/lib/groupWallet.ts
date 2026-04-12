@@ -2,6 +2,7 @@ import "server-only";
 import { PrivyClient } from "@privy-io/server-auth";
 import { env } from "./env";
 import { encodeFunctionData } from "viem";
+import { BASE_CAIP2 } from "./constants";
 
 /**
  * Per-group custodial wallets via Privy Server Wallets.
@@ -43,7 +44,7 @@ export async function sendGroupTransaction(
 ): Promise<`0x${string}`> {
   const result = await privy().walletApi.ethereum.sendTransaction({
     walletId: privyWalletId,
-    caip2: "eip155:8453", // Base
+    caip2: BASE_CAIP2,
     transaction: {
       to,
       value: "0x0",

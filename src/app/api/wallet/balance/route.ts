@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { basePublicClient } from "@/lib/viem";
 import { erc20Abi, formatUnits, getAddress, isAddress } from "viem";
+import { BASE_CHAIN_ID, USDC_BASE } from "@/lib/constants";
 
 /**
  * GET /api/wallet/balance?address=0x...
@@ -13,11 +14,10 @@ import { erc20Abi, formatUnits, getAddress, isAddress } from "viem";
  */
 
 const LIFI_BASE = "https://li.quest/v1";
-const BASE_CHAIN_ID = 8453;
 
 // Well-known stablecoins & majors on Base to always check
 const PRIORITY_TOKENS = [
-  "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC
+  USDC_BASE,                                      // USDC
   "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", // DAI
   "0x4200000000000000000000000000000000000006", // WETH
   "0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA", // USDbC

@@ -1,17 +1,14 @@
 import "server-only";
 import { basePublicClient } from "./viem";
 import { sendGroupContractCall } from "./groupWallet";
+import { USDC_BASE, CENTS_TO_USDC_UNITS } from "./constants";
 
 /**
  * ERC-4626 vault helpers + on-chain deposit/redeem/transfer.
  *
  * Vault address is always per-group (from the DB), never from env.
  * Signing is done via Privy server wallets — no local private keys.
- * USDC on Base: 6 decimals → 1 cent = 10_000 base units.
  */
-
-export const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
-const CENTS_TO_USDC_UNITS = BigInt(10_000); // 1 cent = 10,000 USDC base units
 
 const ERC4626_ABI = [
   {

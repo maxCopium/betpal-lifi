@@ -3,6 +3,10 @@
 import { useState, useCallback } from "react";
 import { authedFetch } from "@/lib/clientFetch";
 import { toBaseUnits } from "@/lib/amounts";
+import {
+  BASE_CHAIN_ID, USDC_BASE,
+  POLYGON_CHAIN_ID, USDC_POLYGON,
+} from "@/lib/constants";
 
 export type SourceChoice = {
   label: string;
@@ -15,14 +19,14 @@ export type SourceChoice = {
 export const SOURCES: SourceChoice[] = [
   {
     label: "USDC · Base",
-    chainId: 8453,
-    token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    chainId: BASE_CHAIN_ID,
+    token: USDC_BASE,
     decimals: 6,
   },
   {
     label: "USDC · Polygon",
-    chainId: 137,
-    token: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+    chainId: POLYGON_CHAIN_ID,
+    token: USDC_POLYGON,
     decimals: 6,
   },
 ];

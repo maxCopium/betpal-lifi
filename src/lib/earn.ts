@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { BASE_CHAIN_ID } from "./constants";
 
 /**
  * LI.FI Earn Data API wrapper.
@@ -151,7 +152,7 @@ const FALLBACK_VAULT = "0xbeefe94c8ad530842bfe7d8b397938ffc1cb83b2"; // STEAKUSD
 export async function bestUsdcVaultOnBase(): Promise<{ address: string; name?: string; apy?: number }> {
   try {
     const vaults = await listVaults({
-      chainId: 8453,
+      chainId: BASE_CHAIN_ID,
       asset: "USDC",
       sortBy: "apy",
       limit: 1,

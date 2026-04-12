@@ -16,6 +16,7 @@ import { WithdrawForm } from "./WithdrawForm";
 import { NewBetDialog } from "./NewBetDialog";
 import { BetList } from "./BetList";
 import { useVaultInfo } from "@/hooks/useVaultInfo";
+import { BASE_CHAIN_ID } from "@/lib/constants";
 
 type GroupRow = {
   id: string;
@@ -113,7 +114,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   const [proposal, setProposal] = useState<VaultProposal | null>(null);
   const [vaultActionPending, setVaultActionPending] = useState(false);
   const [vaultMessage, setVaultMessage] = useState<string | null>(null);
-  const { info: vaultInfo } = useVaultInfo(8453, group?.vault_address ?? "");
+  const { info: vaultInfo } = useVaultInfo(BASE_CHAIN_ID, group?.vault_address ?? "");
 
   async function runReconcile() {
     setReconciling(true);
@@ -212,7 +213,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
     (async () => {
       try {
         const data = await authedFetch<{ vaults: VaultOption[] }>(
-          `/api/earn/vaults?chainId=8453&asset=USDC&limit=5`,
+          `/api/earn/vaults?chainId=${BASE_CHAIN_ID}&asset=USDC&limit=5`,
         );
         const currentAddr = group.vault_address.toLowerCase();
         const better = (data.vaults ?? []).filter(

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { getVaultDetail, vaultApy } from "@/lib/earn";
+import { USDC_BASE } from "@/lib/constants";
 
 /**
  * Vault switch — 4-eye principle.
@@ -16,8 +17,6 @@ import { getVaultDetail, vaultApy } from "@/lib/earn";
  * Any group member can propose. A DIFFERENT member must accept.
  * Proposer can cancel their own proposal. Any member can reject.
  */
-
-const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 
 const ProposeBody = z.object({
   newVaultAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),

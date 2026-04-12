@@ -4,6 +4,7 @@ import { supabaseService } from "@/lib/supabase";
 import { sendGroupContractCall } from "@/lib/groupWallet";
 import { basePublicClient } from "@/lib/viem";
 import { getVaultDetail, vaultApy } from "@/lib/earn";
+import { USDC_BASE } from "@/lib/constants";
 
 /**
  * POST /api/groups/:id/vault-switch/accept
@@ -11,8 +12,6 @@ import { getVaultDetail, vaultApy } from "@/lib/earn";
  * Second pair of eyes: a DIFFERENT member accepts the pending vault switch.
  * Executes the on-chain migration: old vault → USDC → new vault.
  */
-
-const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 
 const ERC4626_ABI = [
   {

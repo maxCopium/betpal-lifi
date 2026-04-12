@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from "react";
 import type { DepositSource } from "@/app/api/deposit-sources/route";
+import {
+  BASE_CHAIN_ID, USDC_BASE,
+  POLYGON_CHAIN_ID, USDC_POLYGON,
+} from "@/lib/constants";
 
 /**
  * Fetches available deposit sources from /api/deposit-sources.
@@ -12,16 +16,16 @@ import type { DepositSource } from "@/app/api/deposit-sources/route";
 
 const FALLBACK_SOURCES: DepositSource[] = [
   {
-    chainId: 8453,
+    chainId: BASE_CHAIN_ID,
     chainName: "Base",
-    token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    token: USDC_BASE,
     symbol: "USDC",
     decimals: 6,
   },
   {
-    chainId: 137,
+    chainId: POLYGON_CHAIN_ID,
     chainName: "Polygon",
-    token: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+    token: USDC_POLYGON,
     symbol: "USDC",
     decimals: 6,
   },
@@ -35,7 +39,7 @@ export function useDepositSources(toToken?: string) {
     let cancelled = false;
     (async () => {
       try {
-        const params = new URLSearchParams({ toChain: "8453" });
+        const params = new URLSearchParams({ toChain: String(BASE_CHAIN_ID) });
         if (toToken) params.set("toToken", toToken);
         const res = await fetch(`/api/deposit-sources?${params}`);
         if (!res.ok) throw new Error("fetch failed");

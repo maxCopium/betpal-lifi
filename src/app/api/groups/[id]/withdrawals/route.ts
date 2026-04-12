@@ -5,6 +5,7 @@ import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { addBalanceEvent, getUserFreeBalanceCents } from "@/lib/ledger";
 import { redeemFromVault } from "@/lib/vault";
+import { BASE_CHAIN_ID } from "@/lib/constants";
 
 /**
  * POST /api/groups/[id]/withdrawals
@@ -90,9 +91,9 @@ export async function POST(
       user_id: me.id,
       type: "withdrawal",
       amount_cents: body.amountCents,
-      source_chain: 8453,
+      source_chain: BASE_CHAIN_ID,
       source_token: "vault",
-      dest_chain: 8453,
+      dest_chain: BASE_CHAIN_ID,
       dest_token: "USDC",
       status: "executing",
       idempotency_key: `withdrawal:${withdrawalId}`,

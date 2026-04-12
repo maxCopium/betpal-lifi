@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
+import { BASE_CHAIN_ID } from "@/lib/constants";
 
 type CreatedGroup = {
   id: string;
@@ -77,7 +78,7 @@ export function NewGroupForm() {
     (async () => {
       try {
         const data = await authedFetch<{ vaults: VaultOption[] }>(
-          "/api/earn/vaults?chainId=8453&asset=USDC&limit=10",
+          `/api/earn/vaults?chainId=${BASE_CHAIN_ID}&asset=USDC&limit=10`,
         );
         if (!cancelled) {
           setVaults(data.vaults);

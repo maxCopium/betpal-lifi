@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { getComposerQuote } from "@/lib/composer";
-import { USDC_BASE } from "@/lib/vault";
+import { USDC_BASE, BASE_CHAIN_ID } from "@/lib/constants";
 
 /**
  * POST /api/groups/:id/deposits
@@ -117,7 +117,7 @@ export async function POST(
     // The server deposits USDC into the vault separately (in Phase 3 confirm).
     const quote = await getComposerQuote({
       fromChain: body.fromChain,
-      toChain: 8453, // Base
+      toChain: BASE_CHAIN_ID,
       fromToken: body.fromToken,
       toToken: USDC_BASE,
       fromAmount: body.fromAmount,
@@ -148,7 +148,7 @@ export async function POST(
         amount_cents: amountCents,
         source_chain: body.fromChain,
         source_token: body.fromToken,
-        dest_chain: 8453,
+        dest_chain: BASE_CHAIN_ID,
         dest_token: USDC_BASE,
         composer_route_id: quote.id,
         status: "pending",

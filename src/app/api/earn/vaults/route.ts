@@ -1,6 +1,7 @@
 import "server-only";
 import { errorResponse, requireUser } from "@/lib/auth";
 import { listVaults, vaultApy, vaultTvlUsd, vaultAssetSymbol, vaultProtocolName } from "@/lib/earn";
+import { BASE_CHAIN_ID } from "@/lib/constants";
 
 /**
  * GET /api/earn/vaults?chainId=8453&asset=USDC&limit=10
@@ -12,7 +13,7 @@ export async function GET(request: Request): Promise<Response> {
   try {
     await requireUser(request);
     const url = new URL(request.url);
-    const chainId = Number(url.searchParams.get("chainId") ?? "8453");
+    const chainId = Number(url.searchParams.get("chainId") ?? String(BASE_CHAIN_ID));
     const asset = url.searchParams.get("asset") ?? "USDC";
     const limit = Math.min(20, Math.max(1, Number(url.searchParams.get("limit") ?? "10")));
 

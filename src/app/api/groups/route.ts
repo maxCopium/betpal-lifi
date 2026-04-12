@@ -4,6 +4,7 @@ import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { createGroupWallet } from "@/lib/groupWallet";
 import { bestUsdcVaultOnBase } from "@/lib/earn";
+import { BASE_CHAIN_ID } from "@/lib/constants";
 
 /**
  * POST /api/groups
@@ -70,7 +71,7 @@ export async function POST(request: Request): Promise<Response> {
       const best = await bestUsdcVaultOnBase();
       vaultAddress = best.address;
     }
-    const vaultChainId = body.vaultChainId ?? 8453;
+    const vaultChainId = body.vaultChainId ?? BASE_CHAIN_ID;
 
     const { data: groupRow, error: insertErr } = await sb
       .from("groups")

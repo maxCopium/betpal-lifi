@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getChains, getConnections } from "@/lib/composer";
+import { BASE_CHAIN_ID } from "@/lib/constants";
 
 /**
  * GET /api/deposit-sources?toChain=8453&toToken=0x...
@@ -13,13 +14,13 @@ import { getChains, getConnections } from "@/lib/composer";
 
 // Popular source chains to check for connections
 const SOURCE_CHAIN_IDS = [
-  8453,   // Base
-  1,      // Ethereum
-  137,    // Polygon
-  42161,  // Arbitrum
-  10,     // Optimism
-  43114,  // Avalanche
-  56,     // BSC
+  BASE_CHAIN_ID, // Base
+  1,             // Ethereum
+  137,           // Polygon
+  42161,         // Arbitrum
+  10,            // Optimism
+  43114,         // Avalanche
+  56,            // BSC
 ];
 
 export type DepositSource = {
@@ -34,7 +35,7 @@ export type DepositSource = {
 };
 
 export async function GET(req: NextRequest) {
-  const toChain = req.nextUrl.searchParams.get("toChain") ?? "8453";
+  const toChain = req.nextUrl.searchParams.get("toChain") ?? String(BASE_CHAIN_ID);
   const toToken = req.nextUrl.searchParams.get("toToken");
 
   try {
