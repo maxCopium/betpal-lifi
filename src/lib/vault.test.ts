@@ -25,7 +25,7 @@ vi.mock("./groupWallet", () => ({
   sendGroupContractCall: (...args: any[]) => mockSendGroupContractCall(...args),
 }));
 
-import { getVaultBalanceCents, depositToVault, redeemFromVault } from "./vault";
+import { getVaultBalanceCents, redeemFromVault } from "./vault";
 import { CENTS_TO_USDC_UNITS } from "./constants";
 
 beforeEach(() => {
@@ -66,40 +66,6 @@ describe("getVaultBalanceCents", () => {
       "0x2222222222222222222222222222222222222222",
     );
     expect(cents).toBe(0);
-  });
-});
-
-describe("depositToVault", () => {
-  it("throws when group wallet has no USDC", async () => {
-    mockReadContract.mockResolvedValueOnce(BigInt(0)); // balanceOf → 0 USDC
-
-    await expect(
-      depositToVault(
-        "privy-wallet-1",
-        "0x1111111111111111111111111111111111111111",
-        "0x2222222222222222222222222222222222222222",
-      ),
-    ).rejects.toThrow("no USDC to deposit");
-  });
-
-  it("calls approve then deposit in sequence", async () => {
-    mockReadContract.mockResolvedValueOnce(BigInt(1_000_000)); // 1 USDC balance
-    mockSendGroupContractCall.mockResolvedValue("0xmockhash" as `0x${string}`);
-
-    const result = await depositToVault(
-      "privy-wallet-1",
-      "0xvault",
-      "0xwallet",
-    );
-
-    // Should be called twice: approve + deposit
-    expect(mockSendGroupContractCall).toHaveBeenCalledTimes(2);
-    // First call is approve
-    expect(mockSendGroupContractCall.mock.calls[0][3]).toBe("approve");
-    // Second call is deposit
-    expect(mockSendGroupContractCall.mock.calls[1][3]).toBe("deposit");
-    expect(result.depositTxHash).toBe("0xmockhash");
-    expect(result.amountDeposited).toBe(BigInt(1_000_000));
   });
 });
 

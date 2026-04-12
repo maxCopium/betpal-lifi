@@ -3,8 +3,8 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
-import { getComposerQuote } from "@/lib/composer";
-import { USDC_BASE, BASE_CHAIN_ID } from "@/lib/constants";
+import { getComposerQuote, type LifiQuote } from "@/lib/composer";
+import { BASE_CHAIN_ID } from "@/lib/constants";
 
 /**
  * POST /api/groups/:id/deposits
@@ -14,7 +14,8 @@ import { USDC_BASE, BASE_CHAIN_ID } from "@/lib/constants";
  *   Phase 1 (this route):
  *     - Caller specifies fromChain/fromToken/fromAmount.
  *     - We fetch a LI.FI Composer quote with `toToken` set to the group's
- *       Morpho vault address, so the route ends in a vault deposit on Base.
+ *       Morpho vault address. Composer atomically handles swap + approve +
+ *       vault.deposit() — shares are minted to the group wallet.
  *     - We insert a `transactions` row in status `pending` to track the
  *       lifecycle. The id of that row is returned alongside the quote.
  *
@@ -26,7 +27,8 @@ import { USDC_BASE, BASE_CHAIN_ID } from "@/lib/constants";
  *   Phase 3 (POST /api/groups/:id/deposits/:depositId/confirm):
  *     - We poll Composer's /status endpoint and, on `DONE`, write a
  *       `balance_events` deposit credit (idempotent on tx hash) and flip the
- *       row + the group to `active`.
+ *       row + the group to `active`. No server-side vault deposit needed —
+ *       Composer already deposited directly into the vault.
  *
  * Per Next 16 conventions, `params` is a Promise and must be awaited.
  */
@@ -44,15 +46,20 @@ const Body = z
   });
 
 /**
- * Derive ledger cents from Composer's guaranteed minimum output (toAmountMin).
- * The vault receives USDC (6 decimals): 1 USDC = 1_000_000 base units = 100 cents.
- * So 1 cent = 10_000 base units.
+ * Derive ledger cents from the Composer quote's USD estimate.
  *
- * We use toAmountMin (post-slippage floor) rather than toAmount (estimate) to
- * avoid crediting more than the vault actually received.
+ * When toToken is the Morpho vault, toAmountMin is in vault shares (18 decimals),
+ * not USDC (6 decimals). The quote's `toAmountUSD` field gives us the USD value
+ * regardless of toToken denomination.
+ *
+ * Falls back to parsing toAmountMin as USDC (6 decimals) if toAmountUSD is missing.
  */
-function quoteToAmountCents(toAmountMin: string): number {
-  const raw = BigInt(toAmountMin);
+function quoteToAmountCents(quote: LifiQuote): number {
+  if (quote.estimate.toAmountUSD) {
+    return Math.floor(parseFloat(quote.estimate.toAmountUSD) * 100);
+  }
+  // Fallback: treat toAmountMin as USDC 6-decimal base units
+  const raw = BigInt(quote.estimate.toAmountMin);
   return Number(raw / BigInt(10_000));
 }
 
@@ -113,20 +120,24 @@ export async function POST(
     }
     if (!group.wallet_address) throw new HttpError(409, "group wallet not initialized yet");
 
-    // Quote: route the user's funds as USDC to the group wallet on Base.
-    // The server deposits USDC into the vault separately (in Phase 3 confirm).
+    // Quote: route the user's funds directly into the Morpho vault on Base.
+    // Composer handles swap + approve + vault.deposit() atomically.
+    // Vault shares are minted to the group wallet (toAddress).
+    const vaultAddress = group.vault_address as string;
+    if (!vaultAddress) throw new HttpError(409, "group vault not configured");
+
     const quote = await getComposerQuote({
       fromChain: body.fromChain,
       toChain: BASE_CHAIN_ID,
       fromToken: body.fromToken,
-      toToken: USDC_BASE,
+      toToken: vaultAddress,
       fromAmount: body.fromAmount,
       fromAddress: me.walletAddress,
       toAddress: group.wallet_address as string,
     });
 
-    // Derive cents from the Composer oracle — never trust user-supplied amounts.
-    const amountCents = quoteToAmountCents(quote.estimate.toAmountMin);
+    // Derive cents from the Composer quote's USD value.
+    const amountCents = quoteToAmountCents(quote);
     if (amountCents <= 0) {
       throw new HttpError(400, "quote toAmountMin too small to credit any cents");
     }
@@ -149,7 +160,7 @@ export async function POST(
         source_chain: body.fromChain,
         source_token: body.fromToken,
         dest_chain: BASE_CHAIN_ID,
-        dest_token: USDC_BASE,
+        dest_token: vaultAddress,
         composer_route_id: quote.id,
         status: "pending",
         idempotency_key: idempotencyKey,

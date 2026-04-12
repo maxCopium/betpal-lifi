@@ -122,6 +122,7 @@ const QuoteResponse = z
       .object({
         toAmount: z.string(),
         toAmountMin: z.string(),
+        toAmountUSD: z.string().optional(),
         executionDuration: z.number().optional(),
       })
       .passthrough(),

@@ -333,8 +333,8 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
           {/* Server wallet + gas */}
           {gas && gas.needs_funding && (
             <div className="betpal-alert betpal-alert--error" style={{ fontSize: 12 }}>
-              <strong>Gas needed:</strong> The group wallet has {gas.balance_eth.toFixed(6)} ETH on Base
-              ({gas.txs_affordable} txs remaining). Send Base ETH to enable payouts:
+              <strong>Gas needed for payouts!</strong> The group wallet has {gas.balance_eth.toFixed(6)} ETH
+              ({gas.txs_affordable} txs remaining). Any member can send a small amount of Base ETH (~$0.50 covers ~100 txs):
               <code className="break-all" style={{ display: "block", marginTop: 4, fontSize: 11 }}>
                 {gas.wallet_address}
               </code>
@@ -343,14 +343,17 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
           {gas && !gas.needs_funding && (
             <div style={{ fontSize: 12 }}>
               <span style={{ opacity: 0.6 }}>Gas: {gas.balance_eth.toFixed(6)} ETH (~{gas.txs_affordable} txs)</span>
-              {myRole === "owner" && (
-                <details style={{ marginTop: 4 }}>
-                  <summary style={{ cursor: "pointer", fontSize: 11, opacity: 0.6 }}>Group wallet address</summary>
-                  <code className="break-all" style={{ display: "block", marginTop: 2, fontSize: 11 }}>
+              <details style={{ marginTop: 4 }}>
+                <summary style={{ cursor: "pointer", fontSize: 11, opacity: 0.6 }}>Fund gas / wallet address</summary>
+                <div style={{ marginTop: 4, fontSize: 11 }}>
+                  <div style={{ opacity: 0.7, marginBottom: 4 }}>
+                    Send Base ETH to this address to fund payouts:
+                  </div>
+                  <code className="break-all" style={{ display: "block", fontSize: 11 }}>
                     {gas.wallet_address}
                   </code>
-                </details>
-              )}
+                </div>
+              </details>
             </div>
           )}
 

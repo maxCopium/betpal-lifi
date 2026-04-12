@@ -3,7 +3,6 @@ import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { getComposerStatus } from "@/lib/composer";
 import { addBalanceEvent } from "@/lib/ledger";
-import { depositToVault } from "@/lib/vault";
 
 /**
  * POST /api/groups/:id/deposits/:depositId/confirm
@@ -78,25 +77,8 @@ export async function POST(
         idempotencyKey: `deposit:${tx.tx_hash}`,
       });
 
-      // Deposit USDC from group wallet into vault (server-signed).
-      // Best-effort: if this fails, USDC stays in group wallet and can be
-      // deposited later via reconciliation. Ledger credit is already recorded.
-      const { data: group } = await sb
-        .from("groups")
-        .select("privy_wallet_id, wallet_address, vault_address")
-        .eq("id", groupId)
-        .single();
-      if (group?.privy_wallet_id && group?.wallet_address && group?.vault_address) {
-        try {
-          await depositToVault(
-            group.privy_wallet_id as string,
-            group.vault_address as `0x${string}`,
-            group.wallet_address as `0x${string}`,
-          );
-        } catch (vaultErr) {
-          console.warn(`vault deposit failed (USDC stays in wallet): ${(vaultErr as Error).message}`);
-        }
-      }
+      // No server-side vault deposit needed — Composer deposits directly into
+      // the Morpho vault atomically (toToken = vault address).
 
       const { error: updErr } = await sb
         .from("transactions")
