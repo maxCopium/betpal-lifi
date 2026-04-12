@@ -95,6 +95,11 @@ const MOCK_MARKETS: Record<string, { question: string; outcomes: string[] }> = {
   },
 };
 
+/** Return all mock markets as PolymarketMarket objects. */
+export function getAllMockMarkets(): PolymarketMarket[] {
+  return Object.keys(MOCK_MARKETS).map((id) => getMockMarketData(id)!);
+}
+
 export function isMockMarket(marketId: string): boolean {
   return marketId.startsWith("mock:");
 }

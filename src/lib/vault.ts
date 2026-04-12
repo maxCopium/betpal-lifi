@@ -3,6 +3,7 @@ import { basePublicClient } from "./viem";
 import { sendGroupContractCall } from "./groupWallet";
 import { USDC_BASE, CENTS_TO_USDC_UNITS } from "./constants";
 import { ERC4626_ABI, ERC20_ABI } from "./abis";
+import { ensureGasBestEffort } from "./gas";
 
 /**
  * ERC-4626 vault helpers + on-chain deposit/redeem/transfer.
@@ -57,6 +58,9 @@ export async function depositToVault(
   vaultAddress: `0x${string}`,
   groupWalletAddress: `0x${string}`,
 ): Promise<{ depositTxHash: `0x${string}`; amountDeposited: bigint }> {
+  // Best-effort gas top-up before on-chain ops
+  await ensureGasBestEffort(groupWalletAddress);
+
   const publicClient = basePublicClient();
 
   // Check how much USDC the group wallet holds
@@ -111,6 +115,9 @@ export async function redeemFromVault(
   amountCents: number,
   recipientAddress: `0x${string}`,
 ): Promise<{ redeemTxHash: `0x${string}`; transferTxHash: `0x${string}` }> {
+  // Best-effort gas top-up before on-chain ops
+  await ensureGasBestEffort(groupWalletAddress);
+
   const publicClient = basePublicClient();
 
   const usdcAmount = BigInt(amountCents) * CENTS_TO_USDC_UNITS;

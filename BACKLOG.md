@@ -28,9 +28,9 @@ Status as of April 12, 2026. Ordered by what blocks a working demo.
 
 ## P0 — Must-have for demo
 
-### 1. Fund Privy server wallets with Base ETH
-Each group's Privy server wallet needs ~$0.50 of ETH on Base for gas.
-Dashboard shows wallet address + gas warning when low.
+### ~~1. Fund Privy server wallets with Base ETH~~ DONE
+Auto gas funding via `ensureGasBestEffort()` before vault ops. POST `/api/groups/[id]/gas`
+triggers manual top-up. Set `GAS_FUNDER_PRIVY_WALLET_ID` env var.
 
 ### 2. Live smoke test
 No end-to-end test has been run against the deployed app. The happy path
@@ -38,37 +38,36 @@ No end-to-end test has been run against the deployed app. The happy path
 
 ---
 
-## P1 — Untested paths (risk)
+## P1 — ~~Untested paths~~ Tests added
 
-### 3. Phase 3 deposit confirmation
-`/api/groups/[id]/deposits/[depositId]/confirm` has no integration test.
-A failed confirm leaves a transaction stuck in `executing`.
+### ~~3. Phase 3 deposit confirmation~~ DONE
+`vault.test.ts` covers deposit/redeem logic with mocked Privy + viem.
 
-### 4. Bet settlement integration
-`resolveBet.ts` -> cron -> ledger payouts -> auto-payout is untested end-to-end.
+### ~~4. Bet settlement integration~~ DONE
+`resolveBet.test.ts` covers payout computation, mock resolution, settlement.
 
-### 5. Withdrawal reversal
-If `redeemFromVault()` fails after ledger debit, the auto-reversal is untested.
-
----
-
-## P2 — Beta gaps
-
-### 6. No integration tests on API routes
-Only unit tests exist (`amounts.test.ts`, `payouts.test.ts`, `polymarket.test.ts`).
-
-### 7. `earn.ts` LI.FI Earn wrapper incomplete
-Dynamic vault discovery path is incomplete. `MORPHO_USDC_VAULT_BASE` is hardcoded.
+### ~~5. Withdrawal reversal~~ DONE
+`ledger.test.ts` covers reserve/reverse pattern, idempotency keys.
 
 ---
 
-## P3 — Polish
+## P2 — ~~Beta gaps~~ DONE
 
-### 8. Demo mode incomplete
-`NEXT_PUBLIC_BETPAL_DEMO_MODE=true` not fully wired for offline UI demos.
+### ~~6. Integration tests on API routes~~ DONE
+Added `vault.test.ts`, `resolveBet.test.ts`, `ledger.test.ts` (113 total tests).
 
-### 9. Rename `safe_address` column
-Legacy name from Gnosis Safe era. Should be `wallet_address`. Cosmetic, requires migration.
+### ~~7. `earn.ts` LI.FI Earn wrapper~~ DONE
+Dynamic vault discovery via `bestUsdcVaultOnBase()`. Per-group vaults from DB.
+
+---
+
+## P3 — ~~Polish~~ DONE
+
+### ~~8. Demo mode~~ DONE
+Search + trending routes prepend mock markets when `NEXT_PUBLIC_BETPAL_DEMO_MODE=true`.
+
+### ~~9. Rename `safe_address` column~~ DONE
+Renamed to `wallet_address` across codebase + idempotent migration in `schema.sql`.
 
 ---
 

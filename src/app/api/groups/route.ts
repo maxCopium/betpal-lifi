@@ -96,7 +96,7 @@ export async function POST(request: Request): Promise<Response> {
     // Step 5: write the wallet address and Privy wallet ID.
     const { error: updateErr } = await sb
       .from("groups")
-      .update({ safe_address: walletAddress, privy_wallet_id: walletId, threshold: 2 })
+      .update({ wallet_address: walletAddress, privy_wallet_id: walletId, threshold: 2 })
       .eq("id", groupId);
     if (updateErr) {
       await sb.from("groups").delete().eq("id", groupId);
@@ -122,7 +122,6 @@ export async function POST(request: Request): Promise<Response> {
       {
         id: groupId,
         name: body.name,
-        safe_address: walletAddress, // legacy key name
         wallet_address: walletAddress,
         vault_address: vaultAddress,
         vault_chain_id: vaultChainId,
@@ -149,7 +148,7 @@ export async function GET(request: Request): Promise<Response> {
     const { data, error } = await sb
       .from("group_members")
       .select(
-        "role, group:groups(id, name, safe_address, vault_address, threshold, status, created_at)",
+        "role, group:groups(id, name, wallet_address, vault_address, threshold, status, created_at)",
       )
       .eq("user_id", me.id);
     if (error) throw new HttpError(500, `group list failed: ${error.message}`);

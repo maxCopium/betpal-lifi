@@ -35,22 +35,22 @@ export async function GET(
 
     const { data: group, error: groupErr } = await sb
       .from("groups")
-      .select("id, safe_address, vault_address")
+      .select("id, wallet_address, vault_address")
       .eq("id", groupId)
       .single();
     if (groupErr || !group) throw new HttpError(500, `group lookup failed: ${groupErr?.message}`);
-    if (!group.safe_address) throw new HttpError(409, "group wallet not initialized yet");
+    if (!group.wallet_address) throw new HttpError(409, "group wallet not initialized yet");
 
     const ledgerCents = await getGroupTotalCents(groupId);
     const onChainCents = await getVaultBalanceCents(
       group.vault_address as `0x${string}`,
-      group.safe_address as `0x${string}`,
+      group.wallet_address as `0x${string}`,
     );
     const onChainAvailable = onChainCents !== null;
 
     return Response.json({
       group_id: groupId,
-      wallet_address: group.safe_address,
+      wallet_address: group.wallet_address,
       vault_address: group.vault_address,
       ledger_cents: ledgerCents,
       onchain_cents: onChainCents,

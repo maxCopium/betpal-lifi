@@ -31,6 +31,9 @@ export const env = {
   // Base
   baseRpcUrl: () => optional("BASE_RPC_URL") ?? "https://mainnet.base.org",
 
+  // Gas funding
+  gasFunderPrivyWalletId: () => optional("GAS_FUNDER_PRIVY_WALLET_ID"),
+
   // Cron
   cronSecret: () => optional("CRON_SECRET"),
 };

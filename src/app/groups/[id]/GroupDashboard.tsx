@@ -22,7 +22,7 @@ import { fmtCents, shortAddr } from "@/lib/format";
 type GroupRow = {
   id: string;
   name: string;
-  safe_address: string | null;
+  wallet_address: string | null;
   vault_address: string;
   threshold: number;
   status: string;

@@ -40,7 +40,7 @@ create index if not exists users_basename_trgm
 create table if not exists groups (
   id               uuid primary key default uuid_generate_v4(),
   name             text not null,
-  safe_address     citext,                  -- group wallet address (legacy column name)
+  wallet_address   citext,                  -- group wallet address
   privy_wallet_id  text,                    -- Privy server wallet ID for signing
   vault_address    citext not null,         -- Morpho USDC on Base for v1
   vault_chain_id   integer not null default 8453,
@@ -250,3 +250,6 @@ update bets set stake_amount_cents = 500 where stake_amount_cents is null;
 
 -- Withdrawal completion timestamp
 alter table transactions add column if not exists completed_at timestamptz;
+
+-- Rename legacy safe_address column to wallet_address
+DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='groups' AND column_name='safe_address') THEN ALTER TABLE groups RENAME COLUMN safe_address TO wallet_address; END IF; END $$;

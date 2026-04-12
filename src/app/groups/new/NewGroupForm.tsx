@@ -12,7 +12,7 @@ import { BASE_CHAIN_ID } from "@/lib/constants";
 type CreatedGroup = {
   id: string;
   name: string;
-  safe_address: `0x${string}`;
+  wallet_address: `0x${string}`;
   status: string;
 };
 

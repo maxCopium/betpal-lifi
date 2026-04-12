@@ -36,14 +36,14 @@ export async function POST(
     // Load group with proposal
     const { data: group } = await sb
       .from("groups")
-      .select("id, safe_address, privy_wallet_id, vault_address, vault_chain_id, pending_vault_address, pending_vault_proposed_by")
+      .select("id, wallet_address, privy_wallet_id, vault_address, vault_chain_id, pending_vault_address, pending_vault_proposed_by")
       .eq("id", groupId)
       .single();
     if (!group) throw new HttpError(404, "group not found");
     if (!group.pending_vault_address) {
       throw new HttpError(409, "no vault switch proposal pending");
     }
-    if (!group.safe_address || !group.privy_wallet_id) {
+    if (!group.wallet_address || !group.privy_wallet_id) {
       throw new HttpError(409, "group wallet not initialized");
     }
 
@@ -55,7 +55,7 @@ export async function POST(
     const oldVault = (group.vault_address as string).toLowerCase() as `0x${string}`;
     const newVault = (group.pending_vault_address as string).toLowerCase() as `0x${string}`;
     const walletId = group.privy_wallet_id as string;
-    const wallet = group.safe_address as `0x${string}`;
+    const wallet = group.wallet_address as `0x${string}`;
     const client = basePublicClient();
 
     // Execute on-chain migration

@@ -83,15 +83,15 @@ export async function POST(
       // deposited later via reconciliation. Ledger credit is already recorded.
       const { data: group } = await sb
         .from("groups")
-        .select("privy_wallet_id, safe_address, vault_address")
+        .select("privy_wallet_id, wallet_address, vault_address")
         .eq("id", groupId)
         .single();
-      if (group?.privy_wallet_id && group?.safe_address && group?.vault_address) {
+      if (group?.privy_wallet_id && group?.wallet_address && group?.vault_address) {
         try {
           await depositToVault(
             group.privy_wallet_id as string,
             group.vault_address as `0x${string}`,
-            group.safe_address as `0x${string}`,
+            group.wallet_address as `0x${string}`,
           );
         } catch (vaultErr) {
           console.warn(`vault deposit failed (USDC stays in wallet): ${(vaultErr as Error).message}`);

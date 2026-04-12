@@ -56,11 +56,11 @@ export async function POST(
     // Fetch group wallet + vault details for Privy signing.
     const { data: group, error: grpErr } = await sb
       .from("groups")
-      .select("privy_wallet_id, safe_address, vault_address")
+      .select("privy_wallet_id, wallet_address, vault_address")
       .eq("id", groupId)
       .single();
     if (grpErr || !group) throw new HttpError(500, `group lookup failed: ${grpErr?.message}`);
-    if (!group.privy_wallet_id || !group.safe_address || !group.vault_address) {
+    if (!group.privy_wallet_id || !group.wallet_address || !group.vault_address) {
       throw new HttpError(409, "group wallet or vault not initialized yet");
     }
 
@@ -105,7 +105,7 @@ export async function POST(
       const { redeemTxHash, transferTxHash } = await redeemFromVault(
         group.privy_wallet_id as string,
         group.vault_address as `0x${string}`,
-        group.safe_address as `0x${string}`,
+        group.wallet_address as `0x${string}`,
         body.amountCents,
         me.walletAddress as `0x${string}`,
       );

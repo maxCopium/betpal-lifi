@@ -184,14 +184,14 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     try {
       const { data: group } = await sb
         .from("groups")
-        .select("safe_address, vault_address, privy_wallet_id")
+        .select("wallet_address, vault_address, privy_wallet_id")
         .eq("id", groupId)
         .single();
 
-      if (group?.safe_address && group.vault_address) {
+      if (group?.wallet_address && group.vault_address) {
         const onChainCents = await getVaultBalanceCents(
           group.vault_address as `0x${string}`,
-          group.safe_address as `0x${string}`,
+          group.wallet_address as `0x${string}`,
         );
         if (onChainCents !== null) {
           const ledgerCents = await getGroupTotalCents(groupId);
@@ -234,15 +234,15 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
 
   // ── Auto-payout (best-effort) ──
   const allPayouts = result.payouts.filter((p) => p.amountCents > 0);
-  let groupData: { privy_wallet_id: string; safe_address: string; vault_address: string } | null = null;
+  let groupData: { privy_wallet_id: string; wallet_address: string; vault_address: string } | null = null;
   if (allPayouts.length > 0) {
     const { data: gw } = await sb
       .from("groups")
-      .select("privy_wallet_id, safe_address, vault_address")
+      .select("privy_wallet_id, wallet_address, vault_address")
       .eq("id", groupId)
       .single();
-    if (gw?.privy_wallet_id && gw?.safe_address && gw?.vault_address) {
-      groupData = gw as { privy_wallet_id: string; safe_address: string; vault_address: string };
+    if (gw?.privy_wallet_id && gw?.wallet_address && gw?.vault_address) {
+      groupData = gw as { privy_wallet_id: string; wallet_address: string; vault_address: string };
     }
   }
 
@@ -266,7 +266,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
       await redeemFromVault(
         groupData.privy_wallet_id,
         groupData.vault_address as `0x${string}`,
-        groupData.safe_address as `0x${string}`,
+        groupData.wallet_address as `0x${string}`,
         p.amountCents,
         user.wallet_address as `0x${string}`,
       );

@@ -105,13 +105,13 @@ export async function POST(
     // Look up the group's wallet.
     const { data: group, error: groupErr } = await sb
       .from("groups")
-      .select("id, safe_address, vault_address, vault_chain_id, privy_wallet_id, status")
+      .select("id, wallet_address, vault_address, vault_chain_id, privy_wallet_id, status")
       .eq("id", groupId)
       .single();
     if (groupErr || !group) {
       throw new HttpError(500, `group lookup failed: ${groupErr?.message}`);
     }
-    if (!group.safe_address) throw new HttpError(409, "group wallet not initialized yet");
+    if (!group.wallet_address) throw new HttpError(409, "group wallet not initialized yet");
 
     // Quote: route the user's funds as USDC to the group wallet on Base.
     // The server deposits USDC into the vault separately (in Phase 3 confirm).
@@ -122,7 +122,7 @@ export async function POST(
       toToken: USDC_BASE,
       fromAmount: body.fromAmount,
       fromAddress: me.walletAddress,
-      toAddress: group.safe_address as string,
+      toAddress: group.wallet_address as string,
     });
 
     // Derive cents from the Composer oracle — never trust user-supplied amounts.

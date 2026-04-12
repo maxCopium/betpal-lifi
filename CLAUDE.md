@@ -6,7 +6,7 @@ BetPal uses **Privy server wallets** for per-group custodial wallets. Each group
 Privy-managed wallet created via `privy().walletApi.createWallet()`. The app signs all on-chain
 transactions (vault redemptions, USDC transfers) via the Privy wallet API — no local private keys.
 
-The `safe_address` column in the DB is a **legacy name** — it stores the wallet address.
+The `wallet_address` column in the `groups` table stores the group's custodial wallet address.
 The `privy_wallet_id` column stores the Privy wallet ID used for signing.
 Do not introduce Safe/multisig logic or local key derivation.
 
@@ -37,19 +37,6 @@ when placing a bet.
 - USDC on Base: 6 decimals. 1 cent = 10,000 base units.
 - Base L2 gas: ~$0.04/tx. Group wallets need dust ETH for gas.
 
-# Known Gaps (see BACKLOG.md for full detail)
+# Remaining
 
-## P0 — Demo blockers
-- **Gas funding**: Group server wallets need Base ETH for on-chain txs
-- **Live smoke test**: No E2E test against deployed app yet
-
-## P1 — Untested paths
-- Phase 3 deposit confirm, bet settlement integration, withdrawal reversal
-
-## P2 — Beta gaps
-- No integration tests on API routes
-- `earn.ts` LI.FI Earn wrapper incomplete
-
-## P3 — Polish
-- Demo mode partially wired
-- Rename `safe_address` column to `wallet_address`
+- **Live smoke test**: No E2E test against deployed app yet — only remaining P0 item.
