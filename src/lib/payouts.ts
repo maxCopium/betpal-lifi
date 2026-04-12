@@ -30,6 +30,8 @@ export type Stake = {
   userId: string;
   outcomeChosen: string;
   amountCents: number;
+  /** Polymarket probability (0-1) at time of staking. Used for odds-weighted payouts. */
+  oddsAtStake?: number | null;
 };
 
 export type Payout = {
@@ -68,7 +70,7 @@ export function computePayouts(args: ComputePayoutsArgs): PayoutResult {
   // Aggregate stakes per user (a single user may have multiple stake rows in
   // theory; the bet creation flow currently enforces one-stake-per-user, but
   // the function should be robust to either).
-  type Agg = { userId: string; outcome: string; amountCents: number };
+  type Agg = { userId: string; outcome: string; amountCents: number; oddsAtStake: number | null };
   const perUser = new Map<string, Agg>();
   for (const s of stakes) {
     const existing = perUser.get(s.userId);
@@ -84,6 +86,7 @@ export function computePayouts(args: ComputePayoutsArgs): PayoutResult {
         userId: s.userId,
         outcome: s.outcomeChosen,
         amountCents: s.amountCents,
+        oddsAtStake: s.oddsAtStake ?? null,
       });
     }
   }
@@ -134,12 +137,31 @@ export function computePayouts(args: ComputePayoutsArgs): PayoutResult {
   }
 
   // -------- normal settlement ----------------------------------------------
-  // Winners share the entire pool, weighted by their winning-stake principal.
-  // This naturally folds together: own stake back, share of losers' stakes,
-  // share of yield — all proportional to winning stake size.
+  // Winners share the entire pool. If Polymarket odds were captured at stake
+  // time, we weight by `stake / odds` (implied shares) so underdogs get
+  // properly rewarded. If odds are missing, fall back to pure pari-mutuel
+  // (weight = stake amount).
+  //
+  // Example: Alice bets $5 on "Yes" at 80% → weight = 5/0.8 = 6.25
+  //          Bob bets $5 on "Yes" at 20% → weight = 5/0.2 = 25
+  //          If "Yes" wins, Bob gets 4× Alice's share despite equal stakes,
+  //          because he bet when the market was against him.
+  //
+  // We use integer-scaled weights (multiply by 10000) to stay in integer math
+  // as much as possible. The allocatePoolByWeights function handles the rest.
+  const hasOdds = winners.every((w) => w.oddsAtStake != null && w.oddsAtStake > 0);
+  const SCALE = 10000;
   const allocations = allocatePoolByWeights(
     totalPoolCents,
-    winners.map((w) => ({ userId: w.userId, weight: w.amountCents })),
+    winners.map((w) => {
+      if (hasOdds) {
+        // Implied shares: stake / odds, scaled to integer
+        const impliedShares = Math.round((w.amountCents / w.oddsAtStake!) * SCALE);
+        return { userId: w.userId, weight: Math.max(1, impliedShares) };
+      }
+      // Fallback: pure pari-mutuel
+      return { userId: w.userId, weight: w.amountCents };
+    }),
   );
 
   // Non-winners get nothing, but they must still appear in the output with 0?

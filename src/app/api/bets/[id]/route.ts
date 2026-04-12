@@ -41,7 +41,7 @@ export async function GET(
 
     const { data: stakeRows, error: stakeErr } = await sb
       .from("stakes")
-      .select("id, user_id, outcome_chosen, amount_cents, created_at")
+      .select("id, user_id, outcome_chosen, amount_cents, odds_at_stake, created_at")
       .eq("bet_id", betId);
     if (stakeErr) throw new HttpError(500, `stake list failed: ${stakeErr.message}`);
 

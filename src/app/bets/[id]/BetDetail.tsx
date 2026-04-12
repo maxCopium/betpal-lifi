@@ -33,6 +33,7 @@ type Stake = {
   user_label?: string;
   outcome_chosen: string;
   amount_cents: number;
+  odds_at_stake: number | null;
   created_at: string;
 };
 
@@ -124,7 +125,7 @@ export function BetDetail({ betId }: { betId: string }) {
 
   const buckets = new Map<
     string,
-    { count: number; cents: number; stakers: { label: string; cents: number }[] }
+    { count: number; cents: number; stakers: { label: string; cents: number; oddsAtStake: number | null }[] }
   >();
   for (const o of bet.options) buckets.set(o, { count: 0, cents: 0, stakers: [] });
   for (const s of stakes) {
@@ -135,6 +136,7 @@ export function BetDetail({ betId }: { betId: string }) {
       b.stakers.push({
         label: s.user_label ?? "user",
         cents: Number(s.amount_cents),
+        oddsAtStake: s.odds_at_stake,
       });
     }
   }
@@ -313,7 +315,14 @@ export function BetDetail({ betId }: { betId: string }) {
               {b.stakers.length > 0 && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", opacity: 0.7 }}>
                   {b.stakers.map((s, i) => (
-                    <span key={i}>{s.label} · {fmtCents(s.cents)}</span>
+                    <span key={i}>
+                      {s.label} · {fmtCents(s.cents)}
+                      {s.oddsAtStake != null && (
+                        <span style={{ fontSize: 10, marginLeft: 2, opacity: 0.8 }}>
+                          @{Math.round(s.oddsAtStake * 100)}%
+                        </span>
+                      )}
+                    </span>
                   ))}
                 </div>
               )}
@@ -328,6 +337,11 @@ export function BetDetail({ betId }: { betId: string }) {
           <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
           <div className="betpal-alert betpal-alert--info">
             <strong>Your stake:</strong> {fmtCents(my_stake.amount_cents)} on {my_stake.outcome_chosen}
+            {my_stake.odds_at_stake != null && (
+              <span style={{ marginLeft: 8, opacity: 0.8 }}>
+                (locked at {Math.round(my_stake.odds_at_stake * 100)}% · {(1 / my_stake.odds_at_stake).toFixed(2)}× implied)
+              </span>
+            )}
           </div>
         </>
       )}

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { addBalanceEvent, getUserFreeBalanceCents } from "@/lib/ledger";
+import { getMarket, isMockMarket, getMockMarketData } from "@/lib/polymarket";
 
 /**
  * POST /api/bets/[id]/stake
@@ -44,7 +45,7 @@ export async function POST(
     const sb = supabaseService();
     const { data: bet, error: betErr } = await sb
       .from("bets")
-      .select("id, group_id, options, status, join_deadline")
+      .select("id, group_id, options, status, join_deadline, polymarket_market_id")
       .eq("id", betId)
       .maybeSingle();
     if (betErr) throw new HttpError(500, `bet lookup failed: ${betErr.message}`);
@@ -80,6 +81,37 @@ export async function POST(
       );
     }
 
+    // Capture live Polymarket price for the chosen outcome (best-effort).
+    // This is used for odds-weighted payouts so underdogs get properly rewarded.
+    let oddsAtStake: number | null = null;
+    try {
+      const marketId = bet.polymarket_market_id as string;
+      let outcomes: string[] = [];
+      let prices: number[] = [];
+      if (isMockMarket(marketId)) {
+        const mock = getMockMarketData(marketId);
+        if (mock) {
+          outcomes = Array.isArray(mock.outcomes) ? mock.outcomes.map(String) : JSON.parse(mock.outcomes as string);
+          prices = Array.isArray(mock.outcomePrices) ? mock.outcomePrices.map(Number) : JSON.parse(mock.outcomePrices as string).map(Number);
+        }
+      } else {
+        const market = await getMarket(marketId);
+        const parseArr = (v: unknown): string[] | null => {
+          if (Array.isArray(v)) return v.map(String);
+          if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p.map(String) : null; } catch { return null; } }
+          return null;
+        };
+        outcomes = parseArr(market.outcomes) ?? [];
+        prices = (parseArr(market.outcomePrices) ?? []).map(Number);
+      }
+      const idx = outcomes.indexOf(body.outcome);
+      if (idx >= 0 && idx < prices.length && Number.isFinite(prices[idx])) {
+        oddsAtStake = prices[idx];
+      }
+    } catch {
+      // Non-critical — proceed without odds
+    }
+
     // Insert the stake row first. The unique (bet_id, user_id) constraint
     // serves as the double-stake guard.
     const { data: stake, error: stakeErr } = await sb
@@ -89,8 +121,9 @@ export async function POST(
         user_id: me.id,
         outcome_chosen: body.outcome,
         amount_cents: body.amount_cents,
+        odds_at_stake: oddsAtStake,
       })
-      .select("id, bet_id, user_id, outcome_chosen, amount_cents, created_at")
+      .select("id, bet_id, user_id, outcome_chosen, amount_cents, odds_at_stake, created_at")
       .single();
     if (stakeErr || !stake) {
       if (stakeErr?.code === "23505") {

@@ -116,6 +116,7 @@ create table if not exists stakes (
   user_id         uuid not null references users(id),
   outcome_chosen  text not null,
   amount_cents    bigint not null check (amount_cents > 0),
+  odds_at_stake   double precision,             -- Polymarket probability (0-1) at stake time
   created_at      timestamptz not null default now(),
   unique (bet_id, user_id)
 );
@@ -224,3 +225,10 @@ create table if not exists cancel_votes (
   created_at  timestamptz not null default now(),
   primary key (bet_id, user_id)
 );
+
+-- =============================================================================
+-- MIGRATIONS (idempotent ALTER statements for existing deployments)
+-- =============================================================================
+
+-- Add odds_at_stake to stakes (Polymarket probability at time of bet)
+alter table stakes add column if not exists odds_at_stake double precision;

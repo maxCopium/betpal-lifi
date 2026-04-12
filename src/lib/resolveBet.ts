@@ -71,13 +71,14 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
 
   const { data: stakeRows, error: stakeErr } = await sb
     .from("stakes")
-    .select("user_id, outcome_chosen, amount_cents")
+    .select("user_id, outcome_chosen, amount_cents, odds_at_stake")
     .eq("bet_id", betId);
   if (stakeErr) throw new Error(`stake fetch failed: ${stakeErr.message}`);
   const stakes: Stake[] = (stakeRows ?? []).map((r) => ({
     userId: r.user_id as string,
     outcomeChosen: r.outcome_chosen as string,
     amountCents: Number(r.amount_cents),
+    oddsAtStake: r.odds_at_stake != null ? Number(r.odds_at_stake) : null,
   }));
   const totalPoolCents = stakes.reduce((a, s) => a + s.amountCents, 0);
 

@@ -2,10 +2,11 @@ import { describe, it, expect } from "vitest";
 import { computePayouts, type Stake } from "./payouts";
 
 // Helpers ---------------------------------------------------------------------
-const stake = (userId: string, outcome: string, cents: number): Stake => ({
+const stake = (userId: string, outcome: string, cents: number, odds?: number): Stake => ({
   userId,
   outcomeChosen: outcome,
   amountCents: cents,
+  oddsAtStake: odds ?? null,
 });
 
 const sumPayouts = (r: { payouts: { amountCents: number }[] }) =>
@@ -497,5 +498,114 @@ describe("scale", () => {
       totalPoolCents: 131,
     });
     expect(sumPayouts(r)).toBe(131);
+  });
+});
+
+// =============================================================================
+// Odds-weighted payouts (Polymarket odds at stake time)
+// =============================================================================
+describe("odds-weighted payouts", () => {
+  it("equal stakes, different odds: underdog gets more", () => {
+    // Alice bets $5 on YES at 80%, Bob bets $5 on YES at 20%
+    // Bob took the riskier bet (odds were against YES when he bet)
+    // Weights: Alice = 500/0.8 = 625, Bob = 500/0.2 = 2500
+    // Total pool = 1500 (including loser Charlie's $5)
+    const r = computePayouts({
+      stakes: [
+        stake("alice", "YES", 500, 0.8),
+        stake("bob", "YES", 500, 0.2),
+        stake("charlie", "NO", 500),
+      ],
+      winningOutcome: "YES",
+      totalPoolCents: 1500,
+    });
+    expect(r.refunded).toBe(false);
+    expect(sumPayouts(r)).toBe(1500);
+    // Bob should get ~4x Alice's share (2500/625 = 4)
+    const alicePayout = findPayout(r, "alice")!;
+    const bobPayout = findPayout(r, "bob")!;
+    expect(bobPayout).toBeGreaterThan(alicePayout);
+    // Bob ≈ 1200, Alice ≈ 300 (ratio 4:1)
+    expect(bobPayout).toBe(1200);
+    expect(alicePayout).toBe(300);
+  });
+
+  it("same odds: equivalent to pure pari-mutuel", () => {
+    const r = computePayouts({
+      stakes: [
+        stake("a", "YES", 1000, 0.5),
+        stake("b", "YES", 3000, 0.5),
+        stake("c", "NO", 4000, 0.5),
+      ],
+      winningOutcome: "YES",
+      totalPoolCents: 8000,
+    });
+    // Same odds → same as pari-mutuel (1:3 ratio)
+    expect(findPayout(r, "a")).toBe(2000);
+    expect(findPayout(r, "b")).toBe(6000);
+  });
+
+  it("missing odds on some stakers: falls back to pari-mutuel", () => {
+    const r = computePayouts({
+      stakes: [
+        stake("a", "YES", 1000, 0.8),
+        stake("b", "YES", 3000), // no odds
+        stake("c", "NO", 4000),
+      ],
+      winningOutcome: "YES",
+      totalPoolCents: 8000,
+    });
+    // Fallback to pari-mutuel because not all winners have odds
+    expect(findPayout(r, "a")).toBe(2000);
+    expect(findPayout(r, "b")).toBe(6000);
+  });
+
+  it("odds-weighted preserves pool sum exactly", () => {
+    const r = computePayouts({
+      stakes: [
+        stake("a", "YES", 300, 0.75),
+        stake("b", "YES", 700, 0.35),
+        stake("c", "NO", 1000, 0.65),
+      ],
+      winningOutcome: "YES",
+      totalPoolCents: 2000,
+    });
+    expect(sumPayouts(r)).toBe(2000);
+    expect(r.refunded).toBe(false);
+  });
+
+  it("extreme underdog gets lion's share", () => {
+    // Alice bets at 95% (heavy favorite), Bob bets at 5% (extreme underdog)
+    // Both bet $10. If YES wins:
+    // Alice weight = 1000/0.95 ≈ 1053, Bob weight = 1000/0.05 = 20000
+    // Bob should get ~19x Alice's share
+    const r = computePayouts({
+      stakes: [
+        stake("alice", "YES", 1000, 0.95),
+        stake("bob", "YES", 1000, 0.05),
+        stake("charlie", "NO", 1000),
+      ],
+      winningOutcome: "YES",
+      totalPoolCents: 3000,
+    });
+    expect(sumPayouts(r)).toBe(3000);
+    const alicePayout = findPayout(r, "alice")!;
+    const bobPayout = findPayout(r, "bob")!;
+    expect(bobPayout).toBeGreaterThan(alicePayout * 15); // Bob >> Alice
+  });
+
+  it("refund branch ignores odds (uses principal weights)", () => {
+    // Void bets refund proportionally by principal, not odds
+    const r = computePayouts({
+      stakes: [
+        stake("a", "YES", 1000, 0.8),
+        stake("b", "NO", 1000, 0.2),
+      ],
+      winningOutcome: null,
+      totalPoolCents: 2000,
+    });
+    expect(r.refunded).toBe(true);
+    expect(findPayout(r, "a")).toBe(1000);
+    expect(findPayout(r, "b")).toBe(1000);
   });
 });
