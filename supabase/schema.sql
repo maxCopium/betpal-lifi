@@ -247,3 +247,6 @@ alter table stakes add column if not exists odds_at_stake double precision;
 alter table bets add column if not exists stake_amount_cents bigint;
 -- Backfill: existing bets without stake_amount_cents get 500 ($5 default)
 update bets set stake_amount_cents = 500 where stake_amount_cents is null;
+
+-- Withdrawal completion timestamp
+alter table transactions add column if not exists completed_at timestamptz;
