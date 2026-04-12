@@ -31,9 +31,6 @@ export const env = {
   // Base
   baseRpcUrl: () => optional("BASE_RPC_URL") ?? "https://mainnet.base.org",
 
-  // Vault
-  morphoVaultBase: () => required("MORPHO_USDC_VAULT_BASE"),
-
   // Cron
   cronSecret: () => optional("CRON_SECRET"),
 };

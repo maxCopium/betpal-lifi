@@ -52,15 +52,15 @@ export async function POST(
     if (memErr) throw new HttpError(500, `member check failed: ${memErr.message}`);
     if (!membership) throw new HttpError(403, "not a member of this group");
 
-    // Fetch group wallet details for Privy signing.
+    // Fetch group wallet + vault details for Privy signing.
     const { data: group, error: grpErr } = await sb
       .from("groups")
-      .select("privy_wallet_id, safe_address")
+      .select("privy_wallet_id, safe_address, vault_address")
       .eq("id", groupId)
       .single();
     if (grpErr || !group) throw new HttpError(500, `group lookup failed: ${grpErr?.message}`);
-    if (!group.privy_wallet_id || !group.safe_address) {
-      throw new HttpError(409, "group wallet not initialized yet");
+    if (!group.privy_wallet_id || !group.safe_address || !group.vault_address) {
+      throw new HttpError(409, "group wallet or vault not initialized yet");
     }
 
     // Free-balance check.
@@ -103,6 +103,7 @@ export async function POST(
     try {
       const { redeemTxHash, transferTxHash } = await redeemFromVault(
         group.privy_wallet_id as string,
+        group.vault_address as `0x${string}`,
         group.safe_address as `0x${string}`,
         body.amountCents,
         me.walletAddress as `0x${string}`,

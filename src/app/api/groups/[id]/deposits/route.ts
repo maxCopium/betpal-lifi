@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { getComposerQuote } from "@/lib/composer";
+import { USDC_BASE } from "@/lib/vault";
 
 /**
  * POST /api/groups/:id/deposits
@@ -101,10 +102,10 @@ export async function POST(
       if (existingStake) throw new HttpError(409, "you already have a stake on this bet");
     }
 
-    // Look up the group's wallet + vault.
+    // Look up the group's wallet.
     const { data: group, error: groupErr } = await sb
       .from("groups")
-      .select("id, safe_address, vault_address, vault_chain_id, status")
+      .select("id, safe_address, vault_address, vault_chain_id, privy_wallet_id, status")
       .eq("id", groupId)
       .single();
     if (groupErr || !group) {
@@ -112,13 +113,13 @@ export async function POST(
     }
     if (!group.safe_address) throw new HttpError(409, "group wallet not initialized yet");
 
-    // Quote: route the user's funds into the vault token, with the group
-    // wallet as the beneficiary of vault shares.
+    // Quote: route the user's funds as USDC to the group wallet on Base.
+    // The server deposits USDC into the vault separately (in Phase 3 confirm).
     const quote = await getComposerQuote({
       fromChain: body.fromChain,
-      toChain: Number(group.vault_chain_id),
+      toChain: 8453, // Base
       fromToken: body.fromToken,
-      toToken: group.vault_address as string,
+      toToken: USDC_BASE,
       fromAmount: body.fromAmount,
       fromAddress: me.walletAddress,
       toAddress: group.safe_address as string,
@@ -147,8 +148,8 @@ export async function POST(
         amount_cents: amountCents,
         source_chain: body.fromChain,
         source_token: body.fromToken,
-        dest_chain: Number(group.vault_chain_id),
-        dest_token: group.vault_address as string,
+        dest_chain: 8453,
+        dest_token: USDC_BASE,
         composer_route_id: quote.id,
         status: "pending",
         idempotency_key: idempotencyKey,

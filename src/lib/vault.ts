@@ -1,16 +1,16 @@
 import "server-only";
 import { basePublicClient } from "./viem";
 import { sendGroupContractCall } from "./groupWallet";
-import { env } from "./env";
 
 /**
- * ERC-4626 vault helpers + on-chain redeem/transfer for custodial payouts.
+ * ERC-4626 vault helpers + on-chain deposit/redeem/transfer.
  *
+ * Vault address is always per-group (from the DB), never from env.
  * Signing is done via Privy server wallets — no local private keys.
  * USDC on Base: 6 decimals → 1 cent = 10_000 base units.
  */
 
-const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
+export const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 const CENTS_TO_USDC_UNITS = BigInt(10_000); // 1 cent = 10,000 USDC base units
 
 const ERC4626_ABI = [
@@ -37,6 +37,16 @@ const ERC4626_ABI = [
   },
   {
     type: "function",
+    name: "deposit",
+    stateMutability: "nonpayable",
+    inputs: [
+      { type: "uint256", name: "assets" },
+      { type: "address", name: "receiver" },
+    ],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "redeem",
     stateMutability: "nonpayable",
     inputs: [
@@ -48,7 +58,7 @@ const ERC4626_ABI = [
   },
 ] as const;
 
-const ERC20_TRANSFER_ABI = [
+const ERC20_ABI = [
   {
     type: "function",
     name: "transfer",
@@ -58,6 +68,23 @@ const ERC20_TRANSFER_ABI = [
       { type: "uint256", name: "amount" },
     ],
     outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { type: "address", name: "spender" },
+      { type: "uint256", name: "amount" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ type: "address", name: "account" }],
+    outputs: [{ type: "uint256" }],
   },
 ] as const;
 
@@ -93,29 +120,78 @@ export async function getVaultBalanceCents(
 }
 
 /**
- * Redeem USDC from the Morpho vault and transfer to a recipient.
+ * Deposit USDC from the group wallet into the vault.
+ *
+ * Steps:
+ *   1. Check USDC balance on group wallet
+ *   2. Approve vault to spend USDC
+ *   3. vault.deposit(assets, receiver=groupWallet)
+ *
+ * Used after a user deposits USDC to the group wallet (via Composer or transfer).
+ */
+export async function depositToVault(
+  privyWalletId: string,
+  vaultAddress: `0x${string}`,
+  groupWalletAddress: `0x${string}`,
+): Promise<{ depositTxHash: `0x${string}`; amountDeposited: bigint }> {
+  const publicClient = basePublicClient();
+
+  // Check how much USDC the group wallet holds
+  const usdcBalance = (await publicClient.readContract({
+    address: USDC_BASE,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [groupWalletAddress],
+  })) as bigint;
+
+  if (usdcBalance <= BigInt(0)) {
+    throw new Error("group wallet has no USDC to deposit into vault");
+  }
+
+  // Approve vault to spend USDC
+  const approveTxHash = await sendGroupContractCall(
+    privyWalletId,
+    USDC_BASE,
+    ERC20_ABI,
+    "approve",
+    [vaultAddress, usdcBalance],
+  );
+  await publicClient.waitForTransactionReceipt({ hash: approveTxHash });
+
+  // Deposit USDC into vault — shares go to group wallet
+  const depositTxHash = await sendGroupContractCall(
+    privyWalletId,
+    vaultAddress,
+    ERC4626_ABI,
+    "deposit",
+    [usdcBalance, groupWalletAddress],
+  );
+  await publicClient.waitForTransactionReceipt({ hash: depositTxHash });
+
+  return { depositTxHash, amountDeposited: usdcBalance };
+}
+
+/**
+ * Redeem USDC from the vault and transfer to a recipient.
  *
  * Steps:
  *   1. Convert amountCents → USDC base units → vault shares needed
  *   2. vault.redeem(shares, groupWallet, groupWallet) — USDC back to group wallet
  *   3. USDC.transfer(recipient, amount) — send to user's wallet
  *
- * Signing is via Privy server wallet (privyWalletId). No local keys.
- * Returns the tx hashes for both operations, or throws on failure.
+ * Vault address comes from the group's DB record, not env.
  */
 export async function redeemFromVault(
   privyWalletId: string,
+  vaultAddress: `0x${string}`,
   groupWalletAddress: `0x${string}`,
   amountCents: number,
   recipientAddress: `0x${string}`,
 ): Promise<{ redeemTxHash: `0x${string}`; transferTxHash: `0x${string}` }> {
-  const vaultAddress = env.morphoVaultBase() as `0x${string}`;
   const publicClient = basePublicClient();
 
-  // Convert cents to USDC base units (6 decimals).
   const usdcAmount = BigInt(amountCents) * CENTS_TO_USDC_UNITS;
 
-  // How many vault shares do we need to redeem for this USDC amount?
   const sharesNeeded = (await publicClient.readContract({
     address: vaultAddress,
     abi: ERC4626_ABI,
@@ -127,7 +203,6 @@ export async function redeemFromVault(
     throw new Error(`cannot redeem: ${amountCents} cents converts to 0 vault shares`);
   }
 
-  // Redeem shares → USDC arrives at the group wallet.
   const redeemTxHash = await sendGroupContractCall(
     privyWalletId,
     vaultAddress,
@@ -137,11 +212,10 @@ export async function redeemFromVault(
   );
   await publicClient.waitForTransactionReceipt({ hash: redeemTxHash });
 
-  // Transfer USDC from group wallet to recipient.
   const transferTxHash = await sendGroupContractCall(
     privyWalletId,
-    USDC_BASE as `0x${string}`,
-    ERC20_TRANSFER_ABI,
+    USDC_BASE,
+    ERC20_ABI,
     "transfer",
     [recipientAddress, usdcAmount],
   );

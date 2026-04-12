@@ -188,7 +188,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
         .eq("id", groupId)
         .single();
 
-      if (group?.safe_address && group?.vault_address) {
+      if (group?.safe_address && group.vault_address) {
         const onChainCents = await getVaultBalanceCents(
           group.vault_address as `0x${string}`,
           group.safe_address as `0x${string}`,
@@ -234,21 +234,21 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
 
   // ── Auto-payout (best-effort) ──
   const allPayouts = result.payouts.filter((p) => p.amountCents > 0);
-  let groupWallet: { privy_wallet_id: string; safe_address: string } | null = null;
+  let groupData: { privy_wallet_id: string; safe_address: string; vault_address: string } | null = null;
   if (allPayouts.length > 0) {
     const { data: gw } = await sb
       .from("groups")
-      .select("privy_wallet_id, safe_address")
+      .select("privy_wallet_id, safe_address, vault_address")
       .eq("id", groupId)
       .single();
-    if (gw?.privy_wallet_id && gw?.safe_address) {
-      groupWallet = gw as { privy_wallet_id: string; safe_address: string };
+    if (gw?.privy_wallet_id && gw?.safe_address && gw?.vault_address) {
+      groupData = gw as { privy_wallet_id: string; safe_address: string; vault_address: string };
     }
   }
 
   for (const p of allPayouts) {
     try {
-      if (!groupWallet) continue;
+      if (!groupData) continue;
       const { data: user } = await sb
         .from("users")
         .select("wallet_address")
@@ -264,8 +264,9 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
       if (existing) continue;
 
       await redeemFromVault(
-        groupWallet.privy_wallet_id,
-        groupWallet.safe_address as `0x${string}`,
+        groupData.privy_wallet_id,
+        groupData.vault_address as `0x${string}`,
+        groupData.safe_address as `0x${string}`,
         p.amountCents,
         user.wallet_address as `0x${string}`,
       );
