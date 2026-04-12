@@ -1,6 +1,7 @@
 import "server-only";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
+import { getUserFreeBalanceCents } from "@/lib/ledger";
 import { resolveBetIfPossible } from "@/lib/resolveBet";
 
 /**
@@ -75,6 +76,15 @@ export async function GET(
 
     const myStake = stakes.find((s) => s.user_id === me.id) ?? null;
 
+    // Return the caller's free balance so the UI can auto-pick
+    // "stake from balance" vs "deposit & bet" without a separate call.
+    let freeBalanceCents = 0;
+    try {
+      freeBalanceCents = await getUserFreeBalanceCents(bet.group_id as string, me.id);
+    } catch (e) {
+      console.warn("free balance lookup failed:", (e as Error).message);
+    }
+
     // Lazy resolution: if bet is past deadline and still resolvable,
     // fire resolution in the background. Doesn't block the response.
     const resolvableStatuses = ["open", "locked", "resolving"];
@@ -87,7 +97,7 @@ export async function GET(
       );
     }
 
-    return Response.json({ bet, stakes, my_stake: myStake });
+    return Response.json({ bet, stakes, my_stake: myStake, free_balance_cents: freeBalanceCents });
   } catch (e) {
     return errorResponse(e);
   }

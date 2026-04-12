@@ -43,6 +43,7 @@ type DetailResponse = {
   bet: Bet;
   stakes: Stake[];
   my_stake: Stake | null;
+  free_balance_cents: number;
 };
 
 
@@ -60,7 +61,6 @@ export function BetDetail({ betId }: { betId: string }) {
   const [data, setData] = useState<DetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState("");
-  const [mode, setMode] = useState<"deposit" | "balance">("balance");
   const [sourceIdx, setSourceIdx] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [resolving, setResolving] = useState(false);
@@ -126,7 +126,8 @@ export function BetDetail({ betId }: { betId: string }) {
   if (error && !data) return <div className="betpal-alert betpal-alert--error">{error}</div>;
   if (!data) return <p>Loading bet...</p>;
 
-  const { bet, stakes, my_stake } = data;
+  const { bet, stakes, my_stake, free_balance_cents } = data;
+  const hasBalance = free_balance_cents >= bet.stake_amount_cents;
   const joinPassed = new Date(bet.join_deadline).getTime() <= Date.now();
 
   const buckets = new Map<
@@ -150,38 +151,38 @@ export function BetDetail({ betId }: { betId: string }) {
 
   const stakeUsd = (bet.stake_amount_cents / 100).toFixed(2);
 
-  async function depositAndBet(e: React.FormEvent) {
+  async function placeBet(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const wallet = wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
-    if (!wallet) {
-      setError("No wallet available — sign in first");
-      return;
-    }
-    await flow.execute({
-      groupId: bet.group_id,
-      source: SOURCES[sourceIdx],
-      amount: stakeUsd,
-      wallet,
-      betId: bet.id,
-      outcome,
-    });
-  }
-
-  async function stakeFromBalance(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      await authedFetch(`/api/bets/${betId}/stake`, {
-        method: "POST",
-        body: JSON.stringify({ outcome }),
+    if (hasBalance) {
+      // Stake directly from existing group balance.
+      setSubmitting(true);
+      try {
+        await authedFetch(`/api/bets/${betId}/stake`, {
+          method: "POST",
+          body: JSON.stringify({ outcome }),
+        });
+        await reload();
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setSubmitting(false);
+      }
+    } else {
+      // Deposit via Composer then auto-stake on confirmation.
+      const wallet = wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
+      if (!wallet) {
+        setError("No wallet available — sign in first");
+        return;
+      }
+      await flow.execute({
+        groupId: bet.group_id,
+        source: SOURCES[sourceIdx],
+        amount: stakeUsd,
+        wallet,
+        betId: bet.id,
+        outcome,
       });
-      await reload();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -598,20 +599,9 @@ export function BetDetail({ betId }: { betId: string }) {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-              <input type="radio" name="join-mode" checked={mode === "balance"} onChange={() => setMode("balance")} />
-              From balance
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-              <input type="radio" name="join-mode" checked={mode === "deposit"} onChange={() => setMode("deposit")} />
-              Deposit & bet
-            </label>
-          </div>
-
-          {mode === "deposit" && (
+          {!hasBalance && (
             <div className="field-row-stacked" style={{ gap: 4 }}>
-              <label htmlFor="join-source">Source</label>
+              <label htmlFor="join-source">Pay from</label>
               <select id="join-source" value={sourceIdx} onChange={(e) => setSourceIdx(Number(e.target.value))}>
                 {SOURCES.map((s, i) => (
                   <option key={s.label} value={i}>{s.label}</option>
@@ -620,10 +610,13 @@ export function BetDetail({ betId }: { betId: string }) {
             </div>
           )}
 
-          <form onSubmit={mode === "deposit" ? depositAndBet : stakeFromBalance}>
-            <button type="submit" disabled={submitting || !outcome}>
-              {submitting ? "Locking..." : `Bet ${fmtCents(bet.stake_amount_cents)} on ${outcome || "..."}`}
+          <form onSubmit={placeBet}>
+            <button type="submit" disabled={submitting || flow.open || !outcome}>
+              {submitting || flow.open ? "Placing bet..." : `Bet ${fmtCents(bet.stake_amount_cents)} on ${outcome || "..."}`}
             </button>
+            {hasBalance && (
+              <span style={{ marginLeft: 8, opacity: 0.6, fontSize: 12 }}>from balance</span>
+            )}
           </form>
         </>
       )}

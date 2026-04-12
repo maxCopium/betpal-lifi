@@ -104,7 +104,7 @@ export async function POST(
           // Re-validate: bet may have closed or deadline passed during bridge.
           const { data: bet } = await sb
             .from("bets")
-            .select("status, join_deadline, options")
+            .select("status, join_deadline, options, stake_amount_cents")
             .eq("id", tx.intended_bet_id)
             .single();
 
@@ -113,28 +113,33 @@ export async function POST(
           } else if (new Date(bet.join_deadline) <= new Date()) {
             stakeStatus = "skipped_deadline";
           } else {
-            // Insert stake (unique constraint on bet_id + user_id).
-            const { error: stakeErr } = await sb.from("stakes").insert({
-              bet_id: tx.intended_bet_id,
-              user_id: me.id,
-              outcome_chosen: tx.intended_outcome,
-              amount_cents: amountCents,
-            });
-            if (stakeErr?.code === "23505") {
-              stakeStatus = "skipped_duplicate";
-            } else if (stakeErr) {
-              stakeStatus = "skipped_error";
+            // Insert stake using the bet's fixed stake amount, not the deposit amount.
+            const stakeAmountCents = Number(bet.stake_amount_cents);
+            if (amountCents < stakeAmountCents) {
+              stakeStatus = "skipped_insufficient";
             } else {
-              // Lock funds in ledger.
-              await addBalanceEvent({
-                groupId,
-                userId: me.id,
-                deltaCents: -amountCents,
-                reason: "stake_lock",
-                betId: tx.intended_bet_id,
-                idempotencyKey: `stake_lock:${tx.intended_bet_id}:${me.id}`,
+              const { error: stakeErr } = await sb.from("stakes").insert({
+                bet_id: tx.intended_bet_id,
+                user_id: me.id,
+                outcome_chosen: tx.intended_outcome,
+                amount_cents: stakeAmountCents,
               });
-              stakeStatus = "created";
+              if (stakeErr?.code === "23505") {
+                stakeStatus = "skipped_duplicate";
+              } else if (stakeErr) {
+                stakeStatus = "skipped_error";
+              } else {
+                // Lock the bet's stake amount in ledger (not the full deposit).
+                await addBalanceEvent({
+                  groupId,
+                  userId: me.id,
+                  deltaCents: -stakeAmountCents,
+                  reason: "stake_lock",
+                  betId: tx.intended_bet_id,
+                  idempotencyKey: `stake_lock:${tx.intended_bet_id}:${me.id}`,
+                });
+                stakeStatus = "created";
+              }
             }
           }
         } catch {
