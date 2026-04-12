@@ -141,6 +141,34 @@ export async function getVaultDetail(opts: {
   return VaultSchema.parse(json);
 }
 
+/**
+ * Find the highest-APY USDC vault on Base via LI.FI Earn.
+ * Used at group creation to auto-select the best vault.
+ * Falls back to a known-good vault if the API is down.
+ */
+const FALLBACK_VAULT = "0xbeefe94c8ad530842bfe7d8b397938ffc1cb83b2"; // STEAKUSDC on Base
+
+export async function bestUsdcVaultOnBase(): Promise<{ address: string; name?: string; apy?: number }> {
+  try {
+    const vaults = await listVaults({
+      chainId: 8453,
+      asset: "USDC",
+      sortBy: "apy",
+      limit: 1,
+    });
+    if (vaults.length > 0) {
+      return {
+        address: vaults[0].address,
+        name: vaults[0].name,
+        apy: vaultApy(vaults[0]),
+      };
+    }
+  } catch (e) {
+    console.warn("LI.FI Earn vault discovery failed, using fallback:", (e as Error).message);
+  }
+  return { address: FALLBACK_VAULT };
+}
+
 /** Read a wallet's positions across Earn-indexed vaults. */
 export async function getPortfolio(walletAddress: string): Promise<unknown> {
   const url = new URL(`${EARN_BASE}/v1/earn/portfolio/${walletAddress}`);

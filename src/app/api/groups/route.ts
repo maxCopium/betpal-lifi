@@ -3,6 +3,7 @@ import { z } from "zod";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { createGroupWallet } from "@/lib/groupWallet";
+import { bestUsdcVaultOnBase } from "@/lib/earn";
 
 /**
  * POST /api/groups
@@ -62,10 +63,13 @@ export async function POST(request: Request): Promise<Response> {
     // Step 2: insert placeholder group row to mint an id. We must satisfy the
     // `threshold >= 2` check, so seed with 2; we'll overwrite with the real
     // value in the update below.
-    // Default vault: Morpho STEAKUSDC on Base — highest TVL USDC vault indexed by LI.FI Earn.
+    // Auto-select highest APY USDC vault on Base via LI.FI Earn.
     // Can be overridden per group at creation or switched later via 4-eye vault-switch.
-    const DEFAULT_VAULT = "0xbeefe94c8ad530842bfe7d8b397938ffc1cb83b2";
-    const vaultAddress = body.vaultAddress ?? DEFAULT_VAULT;
+    let vaultAddress = body.vaultAddress;
+    if (!vaultAddress) {
+      const best = await bestUsdcVaultOnBase();
+      vaultAddress = best.address;
+    }
     const vaultChainId = body.vaultChainId ?? 8453;
 
     const { data: groupRow, error: insertErr } = await sb
