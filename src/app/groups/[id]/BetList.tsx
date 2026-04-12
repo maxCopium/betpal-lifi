@@ -5,7 +5,7 @@
  *
  * Each row links to /bets/[id]. Stale auto-refresh on parent's `refreshKey`.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { authedFetch } from "@/lib/clientFetch";
 
@@ -46,44 +46,37 @@ export function BetList({
 }) {
   const [bets, setBets] = useState<BetRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const lastRefresh = useRef(0);
+  const COOLDOWN_MS = 60_000;
+
+  const fetchBets = useCallback(async () => {
+    try {
+      const data = await authedFetch<{ bets: BetRow[] }>(
+        `/api/groups/${groupId}/bets`,
+      );
+      setBets(data.bets);
+      lastRefresh.current = Date.now();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, [groupId]);
 
   useEffect(() => {
     let cancelled = false;
-    async function fetchBets() {
-      try {
-        const data = await authedFetch<{ bets: BetRow[] }>(
-          `/api/groups/${groupId}/bets`,
-        );
-        if (!cancelled) setBets(data.bets);
-      } catch (e) {
-        if (!cancelled) setError((e as Error).message);
-      }
-    }
-    void fetchBets();
+    fetchBets().finally(() => { if (cancelled) return; });
     return () => { cancelled = true; };
-  }, [groupId, refreshKey]);
+  }, [fetchBets, refreshKey]);
 
-  // Poll every 15s if any bet is past deadline and still resolvable.
-  // Server-side lazy resolution + fresh Polymarket prices on each call.
-  useEffect(() => {
-    if (!bets || bets.length === 0) return;
-    const resolvable = ["open", "locked", "resolving"];
-    const now = new Date();
-    const needsPolling = bets.some(
-      (b) => resolvable.includes(b.status) && new Date(b.join_deadline) < now,
-    );
-    if (!needsPolling) return;
+  async function handleRefresh() {
+    const elapsed = Date.now() - lastRefresh.current;
+    if (elapsed < COOLDOWN_MS) return;
+    setRefreshing(true);
+    await fetchBets();
+    setRefreshing(false);
+  }
 
-    const interval = setInterval(async () => {
-      try {
-        const data = await authedFetch<{ bets: BetRow[] }>(
-          `/api/groups/${groupId}/bets`,
-        );
-        setBets(data.bets);
-      } catch { /* silent */ }
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, [bets, groupId]);
+  const cooldownActive = Date.now() - lastRefresh.current < COOLDOWN_MS && lastRefresh.current > 0;
 
   if (error) {
     return <div className="betpal-alert betpal-alert--error">{error}</div>;
@@ -92,6 +85,16 @@ export function BetList({
   if (bets.length === 0) return <p style={{ opacity: 0.6, fontStyle: "italic" }}>No bets yet.</p>;
 
   return (
+    <>
+    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
+      <button
+        onClick={handleRefresh}
+        disabled={refreshing || cooldownActive}
+        style={{ fontSize: 11, padding: "2px 8px" }}
+      >
+        {refreshing ? "Refreshing…" : cooldownActive ? "Wait 1 min" : "Refresh odds"}
+      </button>
+    </div>
     <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
       {bets.map((b) => (
         <li key={b.id} className="betpal-list-item">
@@ -139,5 +142,6 @@ export function BetList({
         </li>
       ))}
     </ul>
+    </>
   );
 }

@@ -104,18 +104,6 @@ export function BetDetail({ betId }: { betId: string }) {
     void reload();
   }, [ready, authenticated, reload]);
 
-  // Poll for resolution: when bet is past deadline and still resolvable,
-  // re-fetch every 10s. Server-side lazy resolution fires on each call.
-  useEffect(() => {
-    if (!data?.bet) return;
-    const resolvable = ["open", "locked", "resolving"];
-    const pastDeadline = new Date(data.bet.join_deadline) < new Date();
-    if (!resolvable.includes(data.bet.status) || !pastDeadline) return;
-
-    const interval = setInterval(() => void reload(), 30_000);
-    return () => clearInterval(interval);
-  }, [data?.bet?.status, data?.bet?.join_deadline, reload]);
-
   useEffect(() => {
     if (flow.stakeStatus) void reload();
   }, [flow.stakeStatus, reload]);
