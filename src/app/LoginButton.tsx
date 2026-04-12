@@ -82,20 +82,20 @@ export function LoginButton() {
             <button type="submit" disabled={saving || !draft.trim()} style={{ fontSize: 11 }}>
               {saving ? "…" : "Save"}
             </button>
-            {me?.display_name && (
-              <button type="button" onClick={() => setEditing(false)} style={{ fontSize: 11 }}>
-                Cancel
-              </button>
-            )}
+            <button type="button" onClick={() => setEditing(false)} style={{ fontSize: 11 }}>
+              Cancel
+            </button>
           </form>
         ) : (
-          <span
-            onClick={() => setHidden((h) => !h)}
-            onDoubleClick={() => setEditing(true)}
-            style={{ cursor: "pointer" }}
-            title="Click to hide · Double-click to edit name"
-          >
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
             <strong>{identity}</strong>
+            <button
+              type="button"
+              onClick={() => { setDraft(me?.display_name ?? ""); setEditing(true); }}
+              style={{ fontSize: 10, padding: "1px 4px", cursor: "pointer" }}
+            >
+              ✎
+            </button>
           </span>
         )}
         <button onClick={logout}>Sign out</button>
