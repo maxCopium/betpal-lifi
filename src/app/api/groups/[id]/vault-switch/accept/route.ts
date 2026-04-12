@@ -87,19 +87,45 @@ export async function POST(
       })) as bigint;
 
       if (usdcMigrated > BigInt(0)) {
-        // Approve new vault
-        const approveTx = await sendGroupContractCall(
-          walletId, USDC_BASE, ERC20_ABI, "approve",
-          [newVault, usdcMigrated],
-        );
-        await client.waitForTransactionReceipt({ hash: approveTx });
+        try {
+          // Approve new vault
+          const approveTx = await sendGroupContractCall(
+            walletId, USDC_BASE, ERC20_ABI, "approve",
+            [newVault, usdcMigrated],
+          );
+          await client.waitForTransactionReceipt({ hash: approveTx });
 
-        // Deposit into new vault
-        depositTxHash = await sendGroupContractCall(
-          walletId, newVault, ERC4626_ABI, "deposit",
-          [usdcMigrated, wallet],
-        );
-        await client.waitForTransactionReceipt({ hash: depositTxHash });
+          // Deposit into new vault
+          depositTxHash = await sendGroupContractCall(
+            walletId, newVault, ERC4626_ABI, "deposit",
+            [usdcMigrated, wallet],
+          );
+          await client.waitForTransactionReceipt({ hash: depositTxHash });
+        } catch (depositErr) {
+          // New vault deposit failed — re-deposit USDC back into old vault
+          // so funds aren't left sitting in the wallet unprotected.
+          console.error("new vault deposit failed, reverting to old vault:", (depositErr as Error).message);
+          try {
+            const reApprove = await sendGroupContractCall(
+              walletId, USDC_BASE, ERC20_ABI, "approve",
+              [oldVault, usdcMigrated],
+            );
+            await client.waitForTransactionReceipt({ hash: reApprove });
+            await sendGroupContractCall(
+              walletId, oldVault, ERC4626_ABI, "deposit",
+              [usdcMigrated, wallet],
+            );
+          } catch (revertErr) {
+            console.error("revert to old vault also failed — USDC in group wallet:", (revertErr as Error).message);
+          }
+          // Clear proposal but keep old vault address
+          await sb.from("groups").update({
+            pending_vault_address: null,
+            pending_vault_proposed_by: null,
+            pending_vault_proposed_at: null,
+          }).eq("id", groupId);
+          throw new HttpError(502, `vault switch failed — funds restored to old vault: ${(depositErr as Error).message}`);
+        }
       }
     }
 

@@ -125,6 +125,19 @@ async function checkUnanimousAndRespond(
   const allVoted = [...stakerIds].every((id) => voteIds.has(id));
 
   if (allVoted && stakerIds.size > 0) {
+    // Re-check bet status to avoid resolving an already-settled bet.
+    const { data: freshBet } = await sb
+      .from("bets")
+      .select("status")
+      .eq("id", betId)
+      .single();
+    if (freshBet?.status === "settled" || freshBet?.status === "voided") {
+      return Response.json(
+        { error: `bet already ${freshBet.status}` },
+        { status: 409 },
+      );
+    }
+
     // Unanimous — set mock_resolved_outcome and trigger resolution.
     const outcome = bet?.force_resolve_outcome as string;
     await sb

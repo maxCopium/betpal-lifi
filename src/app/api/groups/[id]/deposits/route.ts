@@ -52,15 +52,16 @@ const Body = z
  * not USDC (6 decimals). The quote's `toAmountUSD` field gives us the USD value
  * regardless of toToken denomination.
  *
- * Falls back to parsing toAmountMin as USDC (6 decimals) if toAmountUSD is missing.
+ * If toAmountUSD is missing, we cannot safely derive cents from vault share units,
+ * so we reject the quote.
  */
 function quoteToAmountCents(quote: LifiQuote): number {
-  if (quote.estimate.toAmountUSD) {
-    return Math.floor(parseFloat(quote.estimate.toAmountUSD) * 100);
+  if (!quote.estimate.toAmountUSD) {
+    throw new Error(
+      "Composer quote missing toAmountUSD — cannot derive ledger cents from vault share units",
+    );
   }
-  // Fallback: treat toAmountMin as USDC 6-decimal base units
-  const raw = BigInt(quote.estimate.toAmountMin);
-  return Number(raw / BigInt(10_000));
+  return Math.floor(parseFloat(quote.estimate.toAmountUSD) * 100);
 }
 
 export async function POST(
