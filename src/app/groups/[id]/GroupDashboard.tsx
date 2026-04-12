@@ -55,6 +55,21 @@ type MemberRow = {
 
 type MembersResponse = { members: MemberRow[] };
 
+type GasResponse = {
+  wallet_address: string;
+  balance_eth: number;
+  txs_affordable: number;
+  needs_funding: boolean;
+};
+
+type VaultOption = {
+  address: string;
+  name: string | null;
+  apy: number | null;
+  tvl_usd: number | null;
+  protocol: string;
+};
+
 function shortAddr(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
@@ -81,6 +96,11 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   const [newBetOpen, setNewBetOpen] = useState(false);
   const [betsRefreshKey, setBetsRefreshKey] = useState(0);
   const [members, setMembers] = useState<MemberRow[]>([]);
+  const [myRole, setMyRole] = useState<string | null>(null);
+  const [gas, setGas] = useState<GasResponse | null>(null);
+  const [betterVaults, setBetterVaults] = useState<VaultOption[]>([]);
+  const [switching, setSwitching] = useState(false);
+  const [switchResult, setSwitchResult] = useState<string | null>(null);
   const { info: vaultInfo } = useVaultInfo(8453, group?.vault_address ?? "");
 
   async function runReconcile() {
@@ -140,6 +160,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
           setError("Group not found or you are not a member.");
         } else {
           setGroup(match.group);
+          setMyRole(match.role);
         }
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
@@ -149,10 +170,62 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
     })();
     void loadBalance();
     void authedFetch<MembersResponse>(`/api/groups/${groupId}/members`)
-      .then((r) => { if (!cancelled) setMembers(r.members); })
+      .then((r) => {
+        if (cancelled) return;
+        setMembers(r.members);
+      })
+      .catch(() => {});
+    void authedFetch<GasResponse>(`/api/groups/${groupId}/gas`)
+      .then((r) => { if (!cancelled) setGas(r); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [ready, authenticated, groupId, loadBalance]);
+
+  // Fetch better USDC vaults when current APY is known
+  useEffect(() => {
+    if (!vaultInfo?.apy || !group?.vault_address) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await authedFetch<{ vaults: VaultOption[] }>(
+          `/api/earn/vaults?chainId=8453&asset=USDC&limit=5`,
+        );
+        const currentAddr = group.vault_address.toLowerCase();
+        const better = (data.vaults ?? []).filter(
+          (v: VaultOption) =>
+            v.address.toLowerCase() !== currentAddr &&
+            v.apy !== null &&
+            v.apy > (vaultInfo.apy?.total ?? 0),
+        );
+        if (!cancelled) setBetterVaults(better);
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, [vaultInfo, group?.vault_address]);
+
+  async function switchVault(newAddr: string) {
+    setSwitching(true);
+    setSwitchResult(null);
+    try {
+      const res = await authedFetch<{
+        new_vault_name: string;
+        new_vault_apy: number;
+        usdc_migrated_cents: number;
+      }>(`/api/groups/${groupId}/vault-switch`, {
+        method: "POST",
+        body: JSON.stringify({ newVaultAddress: newAddr }),
+      });
+      setSwitchResult(
+        `Switched to ${res.new_vault_name} (${res.new_vault_apy?.toFixed(2)}% APY). Migrated ${fmtCents(res.usdc_migrated_cents)}.`,
+      );
+      // Reload group to pick up new vault_address
+      window.location.reload();
+    } catch (e) {
+      setSwitchResult(`Switch failed: ${(e as Error).message}`);
+    } finally {
+      setSwitching(false);
+    }
+  }
 
   if (!ready) return <p>Loading…</p>;
   if (!authenticated) {
@@ -215,6 +288,52 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
                   · TVL ${vaultInfo.tvl.usd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
                 </span>
               )}
+            </div>
+          )}
+
+          {/* Gas warning */}
+          {gas && gas.needs_funding && (
+            <div className="betpal-alert betpal-alert--error" style={{ fontSize: 12 }}>
+              <strong>Gas needed:</strong> The group wallet has {gas.balance_eth.toFixed(6)} ETH on Base
+              ({gas.txs_affordable} txs remaining). Send a small amount of ETH to fund payouts:
+              <code className="break-all" style={{ display: "block", marginTop: 4, fontSize: 11 }}>
+                {gas.wallet_address}
+              </code>
+            </div>
+          )}
+          {gas && !gas.needs_funding && (
+            <div style={{ fontSize: 11, opacity: 0.6 }}>
+              Gas: {gas.balance_eth.toFixed(6)} ETH (~{gas.txs_affordable} txs)
+            </div>
+          )}
+
+          {/* Better vault available */}
+          {myRole === "owner" && betterVaults.length > 0 && !switching && (
+            <div className="betpal-alert betpal-alert--info" style={{ fontSize: 12 }}>
+              <strong>Higher APY available:</strong>
+              {betterVaults.slice(0, 2).map((v) => (
+                <div key={v.address} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                  <span>
+                    {v.name ?? "Vault"} ({v.protocol}) — <strong>{v.apy?.toFixed(2)}%</strong> APY
+                  </span>
+                  <button
+                    style={{ fontSize: 11, padding: "2px 8px" }}
+                    onClick={() => switchVault(v.address)}
+                  >
+                    Switch
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {switching && (
+            <div className="betpal-alert betpal-alert--info">
+              Migrating funds to new vault…
+            </div>
+          )}
+          {switchResult && (
+            <div className={`betpal-alert ${switchResult.startsWith("Switch failed") ? "betpal-alert--error" : "betpal-alert--success"}`}>
+              {switchResult}
             </div>
           )}
 
