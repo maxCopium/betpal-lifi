@@ -41,6 +41,7 @@ export function NewBetDialog({
   const [searchError, setSearchError] = useState<string | null>(null);
   const [picked, setPicked] = useState<SearchResult | null>(null);
   const [joinDeadline, setJoinDeadline] = useState(defaultJoinDeadline);
+  const [stakeAmountUsd, setStakeAmountUsd] = useState("5");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -94,6 +95,7 @@ export function NewBetDialog({
       setPicked(null);
       setError(null);
       setJoinDeadline(defaultJoinDeadline());
+      setStakeAmountUsd("5");
     }
   }, [open]);
 
@@ -111,11 +113,17 @@ export function NewBetDialog({
     setSubmitting(true);
     try {
       const iso = new Date(joinDeadline).toISOString();
+      const cents = Math.round(parseFloat(stakeAmountUsd) * 100);
+      if (!Number.isFinite(cents) || cents < 100) {
+        setError("Stake must be at least $1.00");
+        return;
+      }
       const bet = await authedFetch<CreatedBet>(`/api/groups/${groupId}/bets`, {
         method: "POST",
         body: JSON.stringify({
           polymarket_market_id: picked.id,
           join_deadline: iso,
+          stake_amount_cents: cents,
         }),
       });
       onCreated(bet.id);
@@ -218,15 +226,31 @@ export function NewBetDialog({
               </div>
             )}
 
-            <div className="field-row-stacked" style={{ gap: 4 }}>
-              <label htmlFor="bet-deadline">Join deadline</label>
-              <input
-                id="bet-deadline"
-                type="datetime-local"
-                value={joinDeadline}
-                onChange={(e) => setJoinDeadline(e.target.value)}
-              />
+            <div style={{ display: "flex", gap: 12 }}>
+              <div className="field-row-stacked" style={{ gap: 4, flex: 1 }}>
+                <label htmlFor="bet-deadline">Join deadline</label>
+                <input
+                  id="bet-deadline"
+                  type="datetime-local"
+                  value={joinDeadline}
+                  onChange={(e) => setJoinDeadline(e.target.value)}
+                />
+              </div>
+              <div className="field-row-stacked" style={{ gap: 4, width: 120 }}>
+                <label htmlFor="bet-stake">Stake (USD)</label>
+                <input
+                  id="bet-stake"
+                  type="text"
+                  inputMode="decimal"
+                  value={stakeAmountUsd}
+                  onChange={(e) => setStakeAmountUsd(e.target.value)}
+                  placeholder="5.00"
+                />
+              </div>
             </div>
+            <p style={{ margin: 0, fontSize: 11, opacity: 0.6 }}>
+              Everyone pays the same stake. Winners split the pot equally.
+            </p>
 
             {error && (
               <div className="betpal-alert betpal-alert--error" role="alert">{error}</div>

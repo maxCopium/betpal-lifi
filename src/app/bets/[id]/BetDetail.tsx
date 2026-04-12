@@ -17,6 +17,7 @@ type Bet = {
   creator_id: string;
   title: string;
   options: string[];
+  stake_amount_cents: number;
   polymarket_market_id: string;
   polymarket_url: string;
   join_deadline: string;
@@ -70,9 +71,8 @@ export function BetDetail({ betId }: { betId: string }) {
   const [data, setData] = useState<DetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState("");
-  const [amountUsd, setAmountUsd] = useState("5");
+  const [mode, setMode] = useState<"deposit" | "balance">("balance");
   const [sourceIdx, setSourceIdx] = useState(0);
-  const [mode, setMode] = useState<"deposit" | "balance">("deposit");
   const [submitting, setSubmitting] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [cancelVotes, setCancelVotes] = useState<{ votes: number; total: number } | null>(null);
@@ -142,6 +142,8 @@ export function BetDetail({ betId }: { betId: string }) {
   }
   const totalCents = stakes.reduce((a, s) => a + Number(s.amount_cents), 0);
 
+  const stakeUsd = (bet.stake_amount_cents / 100).toFixed(2);
+
   async function depositAndBet(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -153,7 +155,7 @@ export function BetDetail({ betId }: { betId: string }) {
     await flow.execute({
       groupId: bet.group_id,
       source: SOURCES[sourceIdx],
-      amount: amountUsd,
+      amount: stakeUsd,
       wallet,
       betId: bet.id,
       outcome,
@@ -165,13 +167,9 @@ export function BetDetail({ betId }: { betId: string }) {
     setSubmitting(true);
     setError(null);
     try {
-      const cents = Math.round(parseFloat(amountUsd) * 100);
-      if (!Number.isFinite(cents) || cents <= 0) {
-        throw new Error("Amount must be > 0");
-      }
       await authedFetch(`/api/bets/${betId}/stake`, {
         method: "POST",
-        body: JSON.stringify({ outcome, amount_cents: cents }),
+        body: JSON.stringify({ outcome }),
       });
       await reload();
     } catch (e) {
@@ -234,6 +232,7 @@ export function BetDetail({ betId }: { betId: string }) {
             Won by {bet.resolution_outcome}
           </strong>
         )}
+        <strong>{fmtCents(bet.stake_amount_cents)}/person</strong>
         <span style={{ opacity: 0.7 }}>
           Join by {formatDate(bet.join_deadline)}
         </span>
@@ -405,101 +404,68 @@ export function BetDetail({ betId }: { betId: string }) {
       {canJoin && (
         <>
           <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
-          <strong style={{ fontSize: 14 }}>Join this bet</strong>
-          <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
+          <strong style={{ fontSize: 14 }}>Join this bet — {fmtCents(bet.stake_amount_cents)}</strong>
+
+          <div className="field-row-stacked" style={{ gap: 4 }}>
+            <label htmlFor="join-outcome">Pick your side</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {bet.options.map((o) => {
+                const liveP = priceMap.get(o);
+                return (
+                  <button
+                    key={o}
+                    type="button"
+                    onClick={() => setOutcome(o)}
+                    style={{
+                      flex: 1,
+                      padding: "10px 8px",
+                      fontWeight: outcome === o ? 700 : 400,
+                      background: outcome === o ? "#000080" : "#f5f5f5",
+                      color: outcome === o ? "#fff" : "inherit",
+                      border: outcome === o ? "2px solid #000080" : "1px solid #ccc",
+                      cursor: "pointer",
+                      textAlign: "center",
+                    }}
+                  >
+                    {o}
+                    {liveP != null && (
+                      <span style={{ display: "block", fontSize: 11, opacity: 0.8, marginTop: 2 }}>
+                        {Math.round(liveP * 100)}% on Polymarket
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-              <input
-                type="radio"
-                name="join-mode"
-                checked={mode === "deposit"}
-                onChange={() => setMode("deposit")}
-              />
-              Deposit & bet
+              <input type="radio" name="join-mode" checked={mode === "balance"} onChange={() => setMode("balance")} />
+              From balance
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-              <input
-                type="radio"
-                name="join-mode"
-                checked={mode === "balance"}
-                onChange={() => setMode("balance")}
-              />
-              Bet from balance
+              <input type="radio" name="join-mode" checked={mode === "deposit"} onChange={() => setMode("deposit")} />
+              Deposit & bet
             </label>
           </div>
 
-          {mode === "deposit" ? (
-            <form onSubmit={depositAndBet} className="flex flex-col gap-3">
-              <div className="field-row-stacked" style={{ gap: 4 }}>
-                <label htmlFor="join-outcome">Outcome</label>
-                <select
-                  id="join-outcome"
-                  value={outcome}
-                  onChange={(e) => setOutcome(e.target.value)}
-                >
-                  {bet.options.map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field-row-stacked" style={{ gap: 4 }}>
-                <label htmlFor="join-amount">Amount (USDC)</label>
-                <input
-                  id="join-amount"
-                  type="text"
-                  inputMode="decimal"
-                  value={amountUsd}
-                  onChange={(e) => setAmountUsd(e.target.value)}
-                />
-              </div>
-              <div className="field-row-stacked" style={{ gap: 4 }}>
-                <label htmlFor="join-source">Source</label>
-                <select
-                  id="join-source"
-                  value={sourceIdx}
-                  onChange={(e) => setSourceIdx(Number(e.target.value))}
-                >
-                  {SOURCES.map((s, i) => (
-                    <option key={s.label} value={i}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <button type="submit">
-                  Bet ${amountUsd} on {outcome || "..."}
-                </button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={stakeFromBalance} className="flex flex-col gap-3">
-              <div className="field-row-stacked" style={{ gap: 4 }}>
-                <label htmlFor="bal-outcome">Outcome</label>
-                <select
-                  id="bal-outcome"
-                  value={outcome}
-                  onChange={(e) => setOutcome(e.target.value)}
-                >
-                  {bet.options.map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field-row-stacked" style={{ gap: 4 }}>
-                <label htmlFor="bal-amount">Amount (USD)</label>
-                <input
-                  id="bal-amount"
-                  type="text"
-                  inputMode="decimal"
-                  value={amountUsd}
-                  onChange={(e) => setAmountUsd(e.target.value)}
-                />
-              </div>
-              <div>
-                <button type="submit" disabled={submitting}>
-                  {submitting ? "Locking..." : "Stake from balance"}
-                </button>
-              </div>
-            </form>
+          {mode === "deposit" && (
+            <div className="field-row-stacked" style={{ gap: 4 }}>
+              <label htmlFor="join-source">Source</label>
+              <select id="join-source" value={sourceIdx} onChange={(e) => setSourceIdx(Number(e.target.value))}>
+                {SOURCES.map((s, i) => (
+                  <option key={s.label} value={i}>{s.label}</option>
+                ))}
+              </select>
+            </div>
           )}
+
+          <form onSubmit={mode === "deposit" ? depositAndBet : stakeFromBalance}>
+            <button type="submit" disabled={submitting || !outcome}>
+              {submitting ? "Locking..." : `Bet ${fmtCents(bet.stake_amount_cents)} on ${outcome || "..."}`}
+            </button>
+          </form>
         </>
       )}
 

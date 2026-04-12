@@ -6,14 +6,15 @@ import { getMarket, isMarketSettleable } from "./polymarket";
 import { getVaultBalanceCents, redeemFromVault } from "./vault";
 
 /**
- * Core bet-resolution logic, shared by the user-triggered resolve route and
+ * Core bet-resolution logic. Shared by the user-triggered resolve route and
  * the auto-resolution cron. No auth/membership checks — those live at the
- * route boundary. Caller is responsible for gating who may invoke this.
+ * route boundary.
  *
- * Returns one of:
- *   - { kind: "noop", status }       — bet already terminal or precondition fails
- *   - { kind: "resolving", reason }  — Polymarket not yet settleable
- *   - { kind: "settled", … }         — payouts written, bet flipped
+ * Equal-stakes model:
+ *   - Winners split the pool equally.
+ *   - If all stakers picked the same side → release locks (money stays in group).
+ *   - If < 2 stakers at resolution → release locks.
+ *   - No refunds — just stake-lock reversals.
  */
 export type ResolveResult =
   | { kind: "noop"; status: string }
@@ -21,17 +22,13 @@ export type ResolveResult =
   | {
       kind: "settled";
       winningOutcome: string | null;
-      refunded: boolean;
+      released: boolean;
       reason: string | null;
       payouts: { userId: string; amountCents: number }[];
-      yieldCredited: number; // total yield cents distributed to winners
+      yieldCredited: number;
     };
 
-/**
- * Advisory lock TTL in milliseconds. If a worker set `processing_started_at`
- * more than this long ago, we consider it stale (crashed) and steal the lock.
- */
-const LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const LOCK_TTL_MS = 5 * 60 * 1000;
 
 export async function resolveBetIfPossible(betId: string): Promise<ResolveResult> {
   const sb = supabaseService();
@@ -52,9 +49,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     return { kind: "noop", status: "join deadline not passed" };
   }
 
-  // Advisory lock: prevent concurrent cron runs from double-processing the
-  // same bet. We set `processing_started_at` to now, but only if it's either
-  // null (nobody working on it) or older than LOCK_TTL_MS (stale/crashed).
+  // Advisory lock
   const now = new Date();
   const lockCutoff = new Date(now.getTime() - LOCK_TTL_MS).toISOString();
   const { data: lockResult, error: lockErr } = await sb
@@ -65,23 +60,56 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     .select("id");
   if (lockErr) throw new Error(`lock acquisition failed: ${lockErr.message}`);
   if (!lockResult || lockResult.length === 0) {
-    // Another worker is actively processing this bet — skip it.
     return { kind: "noop", status: "locked by another worker" };
   }
 
   const { data: stakeRows, error: stakeErr } = await sb
     .from("stakes")
-    .select("user_id, outcome_chosen, amount_cents, odds_at_stake")
+    .select("user_id, outcome_chosen, amount_cents")
     .eq("bet_id", betId);
   if (stakeErr) throw new Error(`stake fetch failed: ${stakeErr.message}`);
   const stakes: Stake[] = (stakeRows ?? []).map((r) => ({
     userId: r.user_id as string,
     outcomeChosen: r.outcome_chosen as string,
     amountCents: Number(r.amount_cents),
-    oddsAtStake: r.odds_at_stake != null ? Number(r.odds_at_stake) : null,
   }));
   const totalPoolCents = stakes.reduce((a, s) => a + s.amountCents, 0);
 
+  // ── Same-side check (before market check) ──
+  // If < 2 stakers or everyone picked the same side, void immediately.
+  const distinctOutcomes = new Set(stakes.map((s) => s.outcomeChosen));
+  if (stakes.length < 2 || distinctOutcomes.size < 2) {
+    // Release all stake locks — money goes back to free balance.
+    for (const s of stakes) {
+      await addBalanceEvent({
+        groupId: bet.group_id as string,
+        userId: s.userId,
+        deltaCents: s.amountCents,
+        reason: "stake_refund",
+        betId,
+        idempotencyKey: `stake_release:${betId}:${s.userId}`,
+      });
+    }
+    const reason = stakes.length < 2 ? "not enough participants" : "all on same side";
+    await sb.from("bets").update({
+      status: "voided",
+      resolution_outcome: null,
+      settled_at: now.toISOString(),
+      resolution_evidence: { reason },
+      processing_started_at: null,
+    }).eq("id", betId);
+
+    return {
+      kind: "settled",
+      winningOutcome: null,
+      released: true,
+      reason,
+      payouts: stakes.map((s) => ({ userId: s.userId, amountCents: s.amountCents })),
+      yieldCredited: 0,
+    };
+  }
+
+  // ── Check Polymarket ──
   const market = await getMarket(bet.polymarket_market_id as string);
   const settle = isMarketSettleable(
     market,
@@ -90,7 +118,6 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   );
 
   if (!settle.settleable) {
-    // Release lock and flip to resolving so the next cron tick retries.
     await sb
       .from("bets")
       .update({ status: "resolving", processing_started_at: null })
@@ -105,6 +132,39 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     totalPoolCents,
   });
 
+  if (result.released) {
+    // Release case (void, no_winners, etc.): reverse stake locks.
+    for (const p of result.payouts) {
+      if (p.amountCents <= 0) continue;
+      await addBalanceEvent({
+        groupId,
+        userId: p.userId,
+        deltaCents: p.amountCents,
+        reason: "stake_refund",
+        betId,
+        idempotencyKey: `stake_release:${betId}:${p.userId}`,
+      });
+    }
+
+    await sb.from("bets").update({
+      status: "voided",
+      resolution_outcome: settle.winningOutcome ?? null,
+      settled_at: now.toISOString(),
+      resolution_evidence: { source: "polymarket", market_id: bet.polymarket_market_id, reason: result.reason },
+      processing_started_at: null,
+    }).eq("id", betId);
+
+    return {
+      kind: "settled",
+      winningOutcome: settle.winningOutcome ?? null,
+      released: true,
+      reason: result.reason ?? null,
+      payouts: result.payouts,
+      yieldCredited: 0,
+    };
+  }
+
+  // ── Winners take the pool ──
   for (const p of result.payouts) {
     if (p.amountCents <= 0) continue;
     await addBalanceEvent({
@@ -117,18 +177,10 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     });
   }
 
-  // ── Yield distribution to winners ──────────────────────────────────────
-  // The group vault accrues yield while funds sit in Morpho. On settlement
-  // we read the on-chain balance, compare it to the ledger, and distribute
-  // any positive drift (= accrued yield) to winners proportionally to their
-  // payout share. This is idempotent via `yield_credit:<betId>:<userId>`.
-  //
-  // If the vault read fails (no shares yet, RPC down), we skip yield
-  // distribution silently — payouts are still correct, yield just stays
-  // uncredited until the next reconciliation or resolution.
+  // ── Yield distribution to winners ──
   let yieldCredited = 0;
   const winnerPayouts = result.payouts.filter((p) => p.amountCents > 0);
-  if (winnerPayouts.length > 0 && !result.refunded) {
+  if (winnerPayouts.length > 0) {
     try {
       const { data: group } = await sb
         .from("groups")
@@ -146,22 +198,13 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
           const yieldCents = Math.max(0, onChainCents - ledgerCents);
 
           if (yieldCents > 0) {
-            // Distribute proportionally to winners using integer math (same
-            // largest-remainder approach as payout distribution).
-            const totalPayoutCents = winnerPayouts.reduce(
-              (a, p) => a + p.amountCents,
-              0,
-            );
+            const totalPayoutCents = winnerPayouts.reduce((a, p) => a + p.amountCents, 0);
             let distributed = 0;
             const shares = winnerPayouts.map((p) => {
-              // Multiply before divide to avoid float precision loss.
-              const raw = Math.floor(
-                (p.amountCents * yieldCents) / totalPayoutCents,
-              );
+              const raw = Math.floor((p.amountCents * yieldCents) / totalPayoutCents);
               distributed += raw;
               return { userId: p.userId, cents: raw };
             });
-            // Give remainder to the largest winner (deterministic).
             let remainder = yieldCents - distributed;
             if (remainder > 0) {
               shares.sort((a, b) => b.cents - a.cents);
@@ -185,17 +228,12 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
         }
       }
     } catch (e) {
-      // Yield distribution is best-effort — don't block settlement.
       console.warn("yield distribution failed:", (e as Error).message);
     }
   }
 
-  // ── Auto-payout: redeem from vault + send USDC to winners ─────────────
-  // Best-effort: if on-chain payout fails, the ledger credit still stands
-  // and the winner can manually withdraw later.
+  // ── Auto-payout (best-effort) ──
   const allPayouts = result.payouts.filter((p) => p.amountCents > 0);
-
-  // Fetch group wallet info for Privy signing (needed for auto-payout).
   let groupWallet: { privy_wallet_id: string; safe_address: string } | null = null;
   if (allPayouts.length > 0) {
     const { data: gw } = await sb
@@ -211,8 +249,6 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   for (const p of allPayouts) {
     try {
       if (!groupWallet) continue;
-
-      // Look up the winner's wallet address.
       const { data: user } = await sb
         .from("users")
         .select("wallet_address")
@@ -220,7 +256,6 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
         .single();
       if (!user?.wallet_address) continue;
 
-      // Check idempotency: skip if already paid out on-chain.
       const { data: existing } = await sb
         .from("balance_events")
         .select("id")
@@ -228,8 +263,6 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
         .maybeSingle();
       if (existing) continue;
 
-      // Send only the payout amount — yield was already credited as separate
-      // yield_credit ledger events and doesn't need additional on-chain transfer.
       await redeemFromVault(
         groupWallet.privy_wallet_id,
         groupWallet.safe_address as `0x${string}`,
@@ -237,8 +270,6 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
         user.wallet_address as `0x${string}`,
       );
 
-      // Record the on-chain payout in the ledger (negative event to balance
-      // the earlier payout credit — funds left the vault).
       await addBalanceEvent({
         groupId,
         userId: p.userId,
@@ -252,7 +283,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
     }
   }
 
-  // Flip to settled and release the advisory lock.
+  // Flip to settled
   const { error: updErr } = await sb
     .from("bets")
     .update({
@@ -268,7 +299,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   return {
     kind: "settled",
     winningOutcome: settle.winningOutcome ?? null,
-    refunded: result.refunded,
+    released: false,
     reason: result.reason ?? null,
     payouts: result.payouts,
     yieldCredited,

@@ -91,6 +91,7 @@ create table if not exists bets (
   polymarket_url        text not null,
   title                 text not null,
   options               jsonb not null,    -- e.g. ["YES","NO"]
+  stake_amount_cents    bigint not null check (stake_amount_cents > 0),  -- fixed stake per participant
   join_deadline         timestamptz not null,
   max_resolution_date   timestamptz not null,
   status                text not null default 'open'
@@ -230,5 +231,10 @@ create table if not exists cancel_votes (
 -- MIGRATIONS (idempotent ALTER statements for existing deployments)
 -- =============================================================================
 
--- Add odds_at_stake to stakes (Polymarket probability at time of bet)
+-- Add odds_at_stake to stakes (Polymarket probability at time of bet — informational only)
 alter table stakes add column if not exists odds_at_stake double precision;
+
+-- Add fixed stake amount per bet (equal stakes model)
+alter table bets add column if not exists stake_amount_cents bigint;
+-- Backfill: existing bets without stake_amount_cents get 500 ($5 default)
+update bets set stake_amount_cents = 500 where stake_amount_cents is null;

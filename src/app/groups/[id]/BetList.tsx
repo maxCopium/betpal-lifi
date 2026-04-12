@@ -13,6 +13,7 @@ type BetRow = {
   id: string;
   title: string;
   options: string[];
+  stake_amount_cents: number;
   polymarket_market_id: string;
   polymarket_url: string;
   join_deadline: string;
@@ -73,9 +74,14 @@ export function BetList({
     <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
       {bets.map((b) => (
         <li key={b.id} className="betpal-list-item">
-          <Link href={`/bets/${b.id}`} style={{ fontWeight: 500 }}>
-            {b.title}
-          </Link>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Link href={`/bets/${b.id}`} style={{ fontWeight: 500 }}>
+              {b.title}
+            </Link>
+            <span style={{ fontSize: 12, opacity: 0.7, whiteSpace: "nowrap", marginLeft: 8 }}>
+              ${(b.stake_amount_cents / 100).toFixed(0)}/person
+            </span>
+          </div>
           <div style={{ marginTop: 4, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <span className={`betpal-status ${STATUS_CLASS[b.status] ?? "betpal-status--info"}`}>
               {b.status}

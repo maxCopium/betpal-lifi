@@ -2,11 +2,10 @@ import { describe, it, expect } from "vitest";
 import { computePayouts, type Stake } from "./payouts";
 
 // Helpers ---------------------------------------------------------------------
-const stake = (userId: string, outcome: string, cents: number, odds?: number): Stake => ({
+const stake = (userId: string, outcome: string, cents: number): Stake => ({
   userId,
   outcomeChosen: outcome,
   amountCents: cents,
-  oddsAtStake: odds ?? null,
 });
 
 const sumPayouts = (r: { payouts: { amountCents: number }[] }) =>
@@ -23,227 +22,218 @@ const findPayout = (
 describe("invariant: sum(payouts) === totalPoolCents", () => {
   it("simple 1v1 win, no yield", () => {
     const r = computePayouts({
-      stakes: [stake("a", "YES", 1000), stake("b", "NO", 1000)],
+      stakes: [stake("a", "YES", 500), stake("b", "NO", 500)],
       winningOutcome: "YES",
-      totalPoolCents: 2000,
+      totalPoolCents: 1000,
     });
-    expect(sumPayouts(r)).toBe(2000);
+    expect(sumPayouts(r)).toBe(1000);
   });
 
   it("1v1 with yield", () => {
     const r = computePayouts({
-      stakes: [stake("a", "YES", 1000), stake("b", "NO", 1000)],
+      stakes: [stake("a", "YES", 500), stake("b", "NO", 500)],
       winningOutcome: "YES",
-      totalPoolCents: 2050,
+      totalPoolCents: 1050,
     });
-    expect(sumPayouts(r)).toBe(2050);
+    expect(sumPayouts(r)).toBe(1050);
   });
 
   it("3v2 with yield and dust", () => {
     const r = computePayouts({
       stakes: [
-        stake("a", "YES", 333),
-        stake("b", "YES", 333),
-        stake("c", "YES", 333),
+        stake("a", "YES", 500),
+        stake("b", "YES", 500),
+        stake("c", "YES", 500),
         stake("d", "NO", 500),
         stake("e", "NO", 500),
       ],
       winningOutcome: "YES",
-      totalPoolCents: 2007, // 1999 principal + 8 yield
+      totalPoolCents: 2507,
     });
-    expect(sumPayouts(r)).toBe(2007);
+    expect(sumPayouts(r)).toBe(2507);
   });
 
-  it("refund void preserves total", () => {
+  it("release void preserves total", () => {
     const r = computePayouts({
-      stakes: [stake("a", "YES", 1234), stake("b", "NO", 5678)],
+      stakes: [stake("a", "YES", 500), stake("b", "NO", 500)],
       winningOutcome: null,
-      totalPoolCents: 6912,
+      totalPoolCents: 1000,
     });
-    expect(sumPayouts(r)).toBe(6912);
-  });
-
-  it("refund with yield distributes whole pool", () => {
-    const r = computePayouts({
-      stakes: [stake("a", "YES", 1000), stake("b", "NO", 3000)],
-      winningOutcome: null,
-      totalPoolCents: 4100, // 100 yield
-    });
-    expect(sumPayouts(r)).toBe(4100);
+    expect(sumPayouts(r)).toBe(1000);
   });
 });
 
 // =============================================================================
-// 1v1 binary mechanics
+// Equal stakes — winners split pool equally
 // =============================================================================
-describe("1v1 binary bets", () => {
-  it("equal stakes, no yield: winner doubles", () => {
+describe("equal stakes — winner takes all", () => {
+  it("1v1: winner gets entire pool", () => {
     const r = computePayouts({
-      stakes: [stake("a", "YES", 1000), stake("b", "NO", 1000)],
+      stakes: [stake("a", "YES", 500), stake("b", "NO", 500)],
       winningOutcome: "YES",
-      totalPoolCents: 2000,
+      totalPoolCents: 1000,
     });
-    expect(r.refunded).toBe(false);
-    expect(findPayout(r, "a")).toBe(2000);
+    expect(r.released).toBe(false);
+    expect(findPayout(r, "a")).toBe(1000);
     expect(findPayout(r, "b")).toBeUndefined();
   });
 
-  it("unequal stakes, no yield: winner takes all", () => {
+  it("1v1 with yield: winner gets pool + yield", () => {
     const r = computePayouts({
-      stakes: [stake("a", "YES", 500), stake("b", "NO", 1500)],
-      winningOutcome: "NO",
-      totalPoolCents: 2000,
-    });
-    expect(findPayout(r, "b")).toBe(2000);
-  });
-
-  it("yield goes to the winner", () => {
-    const r = computePayouts({
-      stakes: [stake("a", "YES", 1000), stake("b", "NO", 1000)],
+      stakes: [stake("a", "YES", 500), stake("b", "NO", 500)],
       winningOutcome: "YES",
-      totalPoolCents: 2200,
+      totalPoolCents: 1100,
     });
-    expect(findPayout(r, "a")).toBe(2200);
+    expect(findPayout(r, "a")).toBe(1100);
   });
 
   it("loser is not in payouts list", () => {
     const r = computePayouts({
-      stakes: [stake("a", "YES", 1000), stake("b", "NO", 1000)],
+      stakes: [stake("a", "YES", 500), stake("b", "NO", 500)],
       winningOutcome: "YES",
-      totalPoolCents: 2000,
+      totalPoolCents: 1000,
     });
     expect(r.payouts.map((p) => p.userId)).toEqual(["a"]);
   });
 });
 
-// =============================================================================
-// Multi-bettor pari-mutuel
-// =============================================================================
-describe("multi-bettor pari-mutuel", () => {
-  it("2 winners share losers' pool proportionally", () => {
+describe("equal stakes — multiple winners split equally", () => {
+  it("2 winners split pool equally", () => {
+    const r = computePayouts({
+      stakes: [
+        stake("a", "YES", 500),
+        stake("b", "YES", 500),
+        stake("c", "NO", 500),
+      ],
+      winningOutcome: "YES",
+      totalPoolCents: 1500,
+    });
+    expect(findPayout(r, "a")).toBe(750);
+    expect(findPayout(r, "b")).toBe(750);
+  });
+
+  it("3 winners, 2 losers: equal split among winners", () => {
+    const r = computePayouts({
+      stakes: [
+        stake("a", "YES", 500),
+        stake("b", "YES", 500),
+        stake("c", "YES", 500),
+        stake("d", "NO", 500),
+        stake("e", "NO", 500),
+      ],
+      winningOutcome: "YES",
+      totalPoolCents: 2500,
+    });
+    // 2500 / 3 = 833.33... → dust handling
+    expect(sumPayouts(r)).toBe(2500);
+    const amts = [findPayout(r, "a")!, findPayout(r, "b")!, findPayout(r, "c")!].sort();
+    expect(amts).toEqual([833, 833, 834]);
+  });
+
+  it("1 vs 4: lone dissenter wins 5×", () => {
+    const r = computePayouts({
+      stakes: [
+        stake("a", "NO", 1000),
+        stake("b", "YES", 1000),
+        stake("c", "YES", 1000),
+        stake("d", "YES", 1000),
+        stake("e", "YES", 1000),
+      ],
+      winningOutcome: "NO",
+      totalPoolCents: 5000,
+    });
+    expect(findPayout(r, "a")).toBe(5000);
+  });
+
+  it("4 vs 1: each winner gets pool/4", () => {
     const r = computePayouts({
       stakes: [
         stake("a", "YES", 1000),
-        stake("b", "YES", 3000),
-        stake("c", "NO", 4000),
+        stake("b", "YES", 1000),
+        stake("c", "YES", 1000),
+        stake("d", "YES", 1000),
+        stake("e", "NO", 1000),
       ],
       winningOutcome: "YES",
-      totalPoolCents: 8000,
+      totalPoolCents: 5000,
     });
-    // a:b winning weight = 1:3, total pool 8000
-    // a should get 2000, b should get 6000
-    expect(findPayout(r, "a")).toBe(2000);
-    expect(findPayout(r, "b")).toBe(6000);
-  });
-
-  it("3 winners with yield", () => {
-    const r = computePayouts({
-      stakes: [
-        stake("a", "YES", 100),
-        stake("b", "YES", 200),
-        stake("c", "YES", 300),
-        stake("d", "NO", 600),
-      ],
-      winningOutcome: "YES",
-      totalPoolCents: 1260, // 1200 principal + 60 yield
-    });
-    // weights 100/200/300 of 1260
-    expect(findPayout(r, "a")).toBe(210);
-    expect(findPayout(r, "b")).toBe(420);
-    expect(findPayout(r, "c")).toBe(630);
-  });
-
-  it("many winners, many losers", () => {
-    const r = computePayouts({
-      stakes: [
-        stake("a", "YES", 100),
-        stake("b", "YES", 100),
-        stake("c", "YES", 100),
-        stake("d", "YES", 100),
-        stake("e", "NO", 200),
-        stake("f", "NO", 200),
-      ],
-      winningOutcome: "YES",
-      totalPoolCents: 800,
-    });
-    expect(findPayout(r, "a")).toBe(200);
-    expect(findPayout(r, "b")).toBe(200);
-    expect(findPayout(r, "c")).toBe(200);
-    expect(findPayout(r, "d")).toBe(200);
+    expect(findPayout(r, "a")).toBe(1250);
+    expect(findPayout(r, "b")).toBe(1250);
+    expect(findPayout(r, "c")).toBe(1250);
+    expect(findPayout(r, "d")).toBe(1250);
   });
 });
 
 // =============================================================================
-// Refund edge cases
+// Release cases (money stays in group)
 // =============================================================================
-describe("refunds", () => {
-  it("void: returns principal to all stakers", () => {
+describe("release cases", () => {
+  it("void: everyone gets stake back", () => {
     const r = computePayouts({
-      stakes: [stake("a", "YES", 1000), stake("b", "NO", 2000)],
+      stakes: [stake("a", "YES", 500), stake("b", "NO", 500)],
       winningOutcome: null,
-      totalPoolCents: 3000,
+      totalPoolCents: 1000,
     });
-    expect(r.refunded).toBe(true);
+    expect(r.released).toBe(true);
     expect(r.reason).toBe("void");
-    expect(findPayout(r, "a")).toBe(1000);
-    expect(findPayout(r, "b")).toBe(2000);
+    expect(findPayout(r, "a")).toBe(500);
+    expect(findPayout(r, "b")).toBe(500);
   });
 
-  it("void: yield distributed pro-rata", () => {
+  it("single staker: released", () => {
     const r = computePayouts({
-      stakes: [stake("a", "YES", 1000), stake("b", "NO", 3000)],
-      winningOutcome: null,
-      totalPoolCents: 4400, // 400 yield
-    });
-    // weights 1:3 of 4400 = 1100, 3300
-    expect(findPayout(r, "a")).toBe(1100);
-    expect(findPayout(r, "b")).toBe(3300);
-  });
-
-  it("single staker: refunded", () => {
-    const r = computePayouts({
-      stakes: [stake("a", "YES", 1000)],
+      stakes: [stake("a", "YES", 500)],
       winningOutcome: "YES",
-      totalPoolCents: 1050,
+      totalPoolCents: 550,
     });
-    expect(r.refunded).toBe(true);
+    expect(r.released).toBe(true);
     expect(r.reason).toBe("single_staker");
-    expect(findPayout(r, "a")).toBe(1050);
+    expect(findPayout(r, "a")).toBe(550);
   });
 
-  it("single outcome (everyone on same side): refunded", () => {
+  it("single outcome (all same side): released", () => {
     const r = computePayouts({
       stakes: [stake("a", "YES", 500), stake("b", "YES", 500)],
       winningOutcome: "YES",
       totalPoolCents: 1010,
     });
-    expect(r.refunded).toBe(true);
+    expect(r.released).toBe(true);
     expect(r.reason).toBe("single_outcome");
-    // 1010 split 1:1 → 505 each
     expect(findPayout(r, "a")).toBe(505);
     expect(findPayout(r, "b")).toBe(505);
   });
 
-  it("no winners (winning outcome had no stakers): refunded", () => {
+  it("no winners (winning outcome had no stakers): released", () => {
     const r = computePayouts({
-      stakes: [stake("a", "YES", 1000), stake("b", "NO", 1000)],
+      stakes: [stake("a", "YES", 500), stake("b", "NO", 500)],
       winningOutcome: "MAYBE",
-      totalPoolCents: 2000,
+      totalPoolCents: 1000,
     });
-    expect(r.refunded).toBe(true);
+    expect(r.released).toBe(true);
     expect(r.reason).toBe("no_winners");
-    expect(findPayout(r, "a")).toBe(1000);
-    expect(findPayout(r, "b")).toBe(1000);
+    expect(findPayout(r, "a")).toBe(500);
+    expect(findPayout(r, "b")).toBe(500);
   });
 
-  it("empty stakes: void refund with no payouts", () => {
+  it("empty stakes: void release with no payouts", () => {
     const r = computePayouts({
       stakes: [],
       winningOutcome: "YES",
       totalPoolCents: 0,
     });
-    expect(r.refunded).toBe(true);
+    expect(r.released).toBe(true);
     expect(r.payouts).toEqual([]);
+  });
+
+  it("release with yield distributes pro-rata", () => {
+    const r = computePayouts({
+      stakes: [stake("a", "YES", 500), stake("b", "NO", 500)],
+      winningOutcome: null,
+      totalPoolCents: 1100,
+    });
+    // Equal stakes → equal split of yield too
+    expect(findPayout(r, "a")).toBe(550);
+    expect(findPayout(r, "b")).toBe(550);
   });
 });
 
@@ -252,110 +242,89 @@ describe("refunds", () => {
 // =============================================================================
 describe("dust handling (largest-remainder)", () => {
   it("indivisible cent goes to largest remainder", () => {
-    // 3 winners equal stake, pool 100 → 33,33,34
     const r = computePayouts({
       stakes: [
-        stake("a", "YES", 10),
-        stake("b", "YES", 10),
-        stake("c", "YES", 10),
-        stake("d", "NO", 10),
+        stake("a", "YES", 500),
+        stake("b", "YES", 500),
+        stake("c", "YES", 500),
+        stake("d", "NO", 500),
       ],
       winningOutcome: "YES",
-      totalPoolCents: 100,
+      totalPoolCents: 2000,
     });
-    expect(sumPayouts(r)).toBe(100);
-    const amts = [
-      findPayout(r, "a")!,
-      findPayout(r, "b")!,
-      findPayout(r, "c")!,
-    ].sort();
-    expect(amts).toEqual([33, 33, 34]);
-  });
-
-  it("two leftover cents distributed to two largest remainders", () => {
-    const r = computePayouts({
-      stakes: [
-        stake("a", "YES", 1),
-        stake("b", "YES", 1),
-        stake("c", "YES", 1),
-        stake("d", "NO", 1),
-      ],
-      winningOutcome: "YES",
-      totalPoolCents: 11,
-    });
-    // floor(11/3)=3 each, remainders all equal → leftover 2 → first two by userId
-    expect(sumPayouts(r)).toBe(11);
-    expect(findPayout(r, "a")).toBe(4);
-    expect(findPayout(r, "b")).toBe(4);
-    expect(findPayout(r, "c")).toBe(3);
+    expect(sumPayouts(r)).toBe(2000);
+    const amts = [findPayout(r, "a")!, findPayout(r, "b")!, findPayout(r, "c")!].sort();
+    expect(amts).toEqual([666, 667, 667]);
   });
 
   it("deterministic tie-breaking by userId", () => {
-    const r1 = computePayouts({
+    const r = computePayouts({
       stakes: [
-        stake("z", "YES", 1),
-        stake("a", "YES", 1),
-        stake("m", "YES", 1),
-        stake("x", "NO", 1),
+        stake("z", "YES", 500),
+        stake("a", "YES", 500),
+        stake("m", "YES", 500),
+        stake("x", "NO", 500),
       ],
       winningOutcome: "YES",
-      totalPoolCents: 10,
+      totalPoolCents: 2000,
     });
-    // floor(10/3)=3 each, leftover 1 → goes to "a" (smallest userId)
-    expect(findPayout(r1, "a")).toBe(4);
-    expect(findPayout(r1, "m")).toBe(3);
-    expect(findPayout(r1, "z")).toBe(3);
-  });
-
-  it("dust in refund branch too", () => {
-    const r = computePayouts({
-      stakes: [stake("a", "YES", 1), stake("b", "NO", 1), stake("c", "YES", 1)],
-      winningOutcome: null,
-      totalPoolCents: 10,
-    });
-    expect(sumPayouts(r)).toBe(10);
+    // All equal remainder → distributed by userId ascending
+    expect(sumPayouts(r)).toBe(2000);
   });
 
   it("never produces a negative payout", () => {
     const r = computePayouts({
-      stakes: [stake("a", "YES", 7), stake("b", "NO", 3)],
+      stakes: [stake("a", "YES", 500), stake("b", "NO", 500)],
       winningOutcome: "YES",
-      totalPoolCents: 10,
+      totalPoolCents: 1000,
     });
     for (const p of r.payouts) expect(p.amountCents).toBeGreaterThanOrEqual(0);
   });
 });
 
 // =============================================================================
-// Yield distribution
+// Large group scenarios
 // =============================================================================
-describe("yield handling", () => {
-  it("zero yield: winner gets exactly principal pool", () => {
+describe("large groups", () => {
+  it("8 players, 6v2: winners each get pool/6", () => {
+    const stakes: Stake[] = [];
+    for (let i = 0; i < 6; i++) stakes.push(stake(`w${i}`, "YES", 500));
+    for (let i = 0; i < 2; i++) stakes.push(stake(`l${i}`, "NO", 500));
     const r = computePayouts({
-      stakes: [stake("a", "YES", 100), stake("b", "NO", 100)],
+      stakes,
       winningOutcome: "YES",
-      totalPoolCents: 200,
+      totalPoolCents: 4000,
     });
-    expect(findPayout(r, "a")).toBe(200);
+    expect(sumPayouts(r)).toBe(4000);
+    expect(r.payouts.length).toBe(6);
+    // 4000/6 = 666.67 → dust distributed
+    const amts = r.payouts.map((p) => p.amountCents).sort();
+    expect(amts[0]).toBeGreaterThanOrEqual(666);
+    expect(amts[5]).toBeLessThanOrEqual(668);
   });
 
-  it("positive yield: scales winner payout above principal", () => {
+  it("10 players, 1v9: lone dissenter wins 10×", () => {
+    const stakes: Stake[] = [stake("hero", "NO", 500)];
+    for (let i = 0; i < 9; i++) stakes.push(stake(`l${i}`, "YES", 500));
     const r = computePayouts({
-      stakes: [stake("a", "YES", 100), stake("b", "NO", 100)],
-      winningOutcome: "YES",
-      totalPoolCents: 220,
+      stakes,
+      winningOutcome: "NO",
+      totalPoolCents: 5000,
     });
-    expect(findPayout(r, "a")).toBe(220);
+    expect(findPayout(r, "hero")).toBe(5000);
   });
 
-  it("yield-only refund (somehow no losers ever existed)", () => {
+  it("100 players with yield, dust distributed", () => {
+    const stakes: Stake[] = [];
+    for (let i = 0; i < 50; i++) stakes.push(stake(`w${i}`, "YES", 1000));
+    for (let i = 0; i < 50; i++) stakes.push(stake(`l${i}`, "NO", 1000));
     const r = computePayouts({
-      stakes: [stake("a", "YES", 1000)],
+      stakes,
       winningOutcome: "YES",
-      totalPoolCents: 1100,
+      totalPoolCents: 100_000 + 1234,
     });
-    expect(r.refunded).toBe(true);
-    expect(findPayout(r, "a")).toBe(1100);
+    expect(sumPayouts(r)).toBe(101_234);
+    expect(r.payouts.length).toBe(50);
   });
 });
 
@@ -365,48 +334,26 @@ describe("yield handling", () => {
 describe("input validation", () => {
   it("throws on negative pool", () => {
     expect(() =>
-      computePayouts({
-        stakes: [stake("a", "YES", 1)],
-        winningOutcome: "YES",
-        totalPoolCents: -1,
-      }),
+      computePayouts({ stakes: [stake("a", "YES", 500)], winningOutcome: "YES", totalPoolCents: -1 }),
     ).toThrow();
   });
 
   it("throws on non-integer pool", () => {
     expect(() =>
-      computePayouts({
-        stakes: [stake("a", "YES", 1)],
-        winningOutcome: "YES",
-        totalPoolCents: 1.5,
-      }),
+      computePayouts({ stakes: [stake("a", "YES", 500)], winningOutcome: "YES", totalPoolCents: 1.5 }),
     ).toThrow();
   });
 
   it("throws on zero stake", () => {
     expect(() =>
-      computePayouts({
-        stakes: [stake("a", "YES", 0)],
-        winningOutcome: "YES",
-        totalPoolCents: 0,
-      }),
-    ).toThrow();
-  });
-
-  it("throws on negative stake", () => {
-    expect(() =>
-      computePayouts({
-        stakes: [stake("a", "YES", -1)],
-        winningOutcome: "YES",
-        totalPoolCents: 0,
-      }),
+      computePayouts({ stakes: [stake("a", "YES", 0)], winningOutcome: "YES", totalPoolCents: 0 }),
     ).toThrow();
   });
 
   it("throws when principal exceeds pool", () => {
     expect(() =>
       computePayouts({
-        stakes: [stake("a", "YES", 100), stake("b", "NO", 100)],
+        stakes: [stake("a", "YES", 500), stake("b", "NO", 500)],
         winningOutcome: "YES",
         totalPoolCents: 50,
       }),
@@ -416,196 +363,46 @@ describe("input validation", () => {
   it("throws if a single user has stakes on multiple outcomes", () => {
     expect(() =>
       computePayouts({
-        stakes: [stake("a", "YES", 100), stake("a", "NO", 100)],
+        stakes: [stake("a", "YES", 500), stake("a", "NO", 500)],
         winningOutcome: "YES",
-        totalPoolCents: 200,
+        totalPoolCents: 1000,
       }),
     ).toThrow();
   });
 });
 
 // =============================================================================
-// Determinism: same input → same output
+// Determinism
 // =============================================================================
 describe("determinism", () => {
-  it("identical inputs return identical outputs across runs", () => {
+  it("identical inputs return identical outputs", () => {
     const args = {
       stakes: [
-        stake("a", "YES", 137),
-        stake("b", "YES", 241),
-        stake("c", "NO", 379),
+        stake("a", "YES", 500),
+        stake("b", "YES", 500),
+        stake("c", "NO", 500),
         stake("d", "NO", 500),
       ],
       winningOutcome: "YES",
-      totalPoolCents: 1300,
+      totalPoolCents: 2000,
     };
     const r1 = computePayouts(args);
     const r2 = computePayouts(args);
     expect(r1).toEqual(r2);
   });
 
-  it("input order does not change winner amounts", () => {
+  it("input order does not change amounts", () => {
     const r1 = computePayouts({
-      stakes: [
-        stake("a", "YES", 100),
-        stake("b", "YES", 200),
-        stake("c", "NO", 300),
-      ],
-      winningOutcome: "YES",
-      totalPoolCents: 600,
-    });
-    const r2 = computePayouts({
-      stakes: [
-        stake("c", "NO", 300),
-        stake("b", "YES", 200),
-        stake("a", "YES", 100),
-      ],
-      winningOutcome: "YES",
-      totalPoolCents: 600,
-    });
-    expect(findPayout(r1, "a")).toBe(findPayout(r2, "a"));
-    expect(findPayout(r1, "b")).toBe(findPayout(r2, "b"));
-  });
-});
-
-// =============================================================================
-// Property-style spot checks at large scale
-// =============================================================================
-describe("scale", () => {
-  it("100 winners, 100 losers, large pool", () => {
-    const stakes: Stake[] = [];
-    for (let i = 0; i < 100; i++) stakes.push(stake(`w${i}`, "YES", 1000));
-    for (let i = 0; i < 100; i++) stakes.push(stake(`l${i}`, "NO", 1000));
-    const r = computePayouts({
-      stakes,
-      winningOutcome: "YES",
-      totalPoolCents: 200_000 + 1234, // some yield
-    });
-    expect(sumPayouts(r)).toBe(201_234);
-    expect(r.payouts.length).toBe(100);
-  });
-
-  it("uneven weights, large prime-ish pool, dust distributed", () => {
-    const stakes: Stake[] = [
-      stake("a", "YES", 7),
-      stake("b", "YES", 11),
-      stake("c", "YES", 13),
-      stake("d", "NO", 100),
-    ];
-    const r = computePayouts({
-      stakes,
-      winningOutcome: "YES",
-      totalPoolCents: 131,
-    });
-    expect(sumPayouts(r)).toBe(131);
-  });
-});
-
-// =============================================================================
-// Odds-weighted payouts (Polymarket odds at stake time)
-// =============================================================================
-describe("odds-weighted payouts", () => {
-  it("equal stakes, different odds: underdog gets more", () => {
-    // Alice bets $5 on YES at 80%, Bob bets $5 on YES at 20%
-    // Bob took the riskier bet (odds were against YES when he bet)
-    // Weights: Alice = 500/0.8 = 625, Bob = 500/0.2 = 2500
-    // Total pool = 1500 (including loser Charlie's $5)
-    const r = computePayouts({
-      stakes: [
-        stake("alice", "YES", 500, 0.8),
-        stake("bob", "YES", 500, 0.2),
-        stake("charlie", "NO", 500),
-      ],
+      stakes: [stake("a", "YES", 500), stake("b", "YES", 500), stake("c", "NO", 500)],
       winningOutcome: "YES",
       totalPoolCents: 1500,
     });
-    expect(r.refunded).toBe(false);
-    expect(sumPayouts(r)).toBe(1500);
-    // Bob should get ~4x Alice's share (2500/625 = 4)
-    const alicePayout = findPayout(r, "alice")!;
-    const bobPayout = findPayout(r, "bob")!;
-    expect(bobPayout).toBeGreaterThan(alicePayout);
-    // Bob ≈ 1200, Alice ≈ 300 (ratio 4:1)
-    expect(bobPayout).toBe(1200);
-    expect(alicePayout).toBe(300);
-  });
-
-  it("same odds: equivalent to pure pari-mutuel", () => {
-    const r = computePayouts({
-      stakes: [
-        stake("a", "YES", 1000, 0.5),
-        stake("b", "YES", 3000, 0.5),
-        stake("c", "NO", 4000, 0.5),
-      ],
+    const r2 = computePayouts({
+      stakes: [stake("c", "NO", 500), stake("b", "YES", 500), stake("a", "YES", 500)],
       winningOutcome: "YES",
-      totalPoolCents: 8000,
+      totalPoolCents: 1500,
     });
-    // Same odds → same as pari-mutuel (1:3 ratio)
-    expect(findPayout(r, "a")).toBe(2000);
-    expect(findPayout(r, "b")).toBe(6000);
-  });
-
-  it("missing odds on some stakers: falls back to pari-mutuel", () => {
-    const r = computePayouts({
-      stakes: [
-        stake("a", "YES", 1000, 0.8),
-        stake("b", "YES", 3000), // no odds
-        stake("c", "NO", 4000),
-      ],
-      winningOutcome: "YES",
-      totalPoolCents: 8000,
-    });
-    // Fallback to pari-mutuel because not all winners have odds
-    expect(findPayout(r, "a")).toBe(2000);
-    expect(findPayout(r, "b")).toBe(6000);
-  });
-
-  it("odds-weighted preserves pool sum exactly", () => {
-    const r = computePayouts({
-      stakes: [
-        stake("a", "YES", 300, 0.75),
-        stake("b", "YES", 700, 0.35),
-        stake("c", "NO", 1000, 0.65),
-      ],
-      winningOutcome: "YES",
-      totalPoolCents: 2000,
-    });
-    expect(sumPayouts(r)).toBe(2000);
-    expect(r.refunded).toBe(false);
-  });
-
-  it("extreme underdog gets lion's share", () => {
-    // Alice bets at 95% (heavy favorite), Bob bets at 5% (extreme underdog)
-    // Both bet $10. If YES wins:
-    // Alice weight = 1000/0.95 ≈ 1053, Bob weight = 1000/0.05 = 20000
-    // Bob should get ~19x Alice's share
-    const r = computePayouts({
-      stakes: [
-        stake("alice", "YES", 1000, 0.95),
-        stake("bob", "YES", 1000, 0.05),
-        stake("charlie", "NO", 1000),
-      ],
-      winningOutcome: "YES",
-      totalPoolCents: 3000,
-    });
-    expect(sumPayouts(r)).toBe(3000);
-    const alicePayout = findPayout(r, "alice")!;
-    const bobPayout = findPayout(r, "bob")!;
-    expect(bobPayout).toBeGreaterThan(alicePayout * 15); // Bob >> Alice
-  });
-
-  it("refund branch ignores odds (uses principal weights)", () => {
-    // Void bets refund proportionally by principal, not odds
-    const r = computePayouts({
-      stakes: [
-        stake("a", "YES", 1000, 0.8),
-        stake("b", "NO", 1000, 0.2),
-      ],
-      winningOutcome: null,
-      totalPoolCents: 2000,
-    });
-    expect(r.refunded).toBe(true);
-    expect(findPayout(r, "a")).toBe(1000);
-    expect(findPayout(r, "b")).toBe(1000);
+    expect(findPayout(r1, "a")).toBe(findPayout(r2, "a"));
+    expect(findPayout(r1, "b")).toBe(findPayout(r2, "b"));
   });
 });

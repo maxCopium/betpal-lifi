@@ -32,6 +32,8 @@ const CreateBody = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   /** ISO timestamp; must be in the future and before the market end. */
   join_deadline: z.string().datetime(),
+  /** Fixed stake amount in cents that every participant must pay. */
+  stake_amount_cents: z.number().int().min(100).max(1_000_000), // $1 – $10,000
 });
 
 const MAX_RESOLUTION_BUFFER_MS = 14 * 24 * 60 * 60 * 1000;
@@ -118,12 +120,13 @@ export async function POST(
         title: body.title ?? market.question,
         question: market.question,
         options: outcomes,
+        stake_amount_cents: body.stake_amount_cents,
         join_deadline: new Date(joinDeadline).toISOString(),
         max_resolution_date: maxResolution,
         status: "open",
       })
       .select(
-        "id, group_id, title, options, polymarket_market_id, polymarket_url, join_deadline, max_resolution_date, status, created_at",
+        "id, group_id, title, options, stake_amount_cents, polymarket_market_id, polymarket_url, join_deadline, max_resolution_date, status, created_at",
       )
       .single();
     if (insertErr || !bet) {
@@ -156,7 +159,7 @@ export async function GET(
     const { data, error } = await sb
       .from("bets")
       .select(
-        "id, title, options, polymarket_market_id, polymarket_url, join_deadline, max_resolution_date, status, resolution_outcome, created_at",
+        "id, title, options, stake_amount_cents, polymarket_market_id, polymarket_url, join_deadline, max_resolution_date, status, resolution_outcome, created_at",
       )
       .eq("group_id", groupId)
       .order("created_at", { ascending: false });

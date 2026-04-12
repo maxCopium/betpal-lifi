@@ -58,7 +58,7 @@ export async function POST(
       {
         status: "settled",
         winning_outcome: result.winningOutcome,
-        refunded: result.refunded,
+        released: result.released,
         reason: result.reason,
         payouts: result.payouts,
         yield_credited_cents: result.yieldCredited,
