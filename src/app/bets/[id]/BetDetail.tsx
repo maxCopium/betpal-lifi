@@ -343,6 +343,10 @@ export function BetDetail({ betId }: { betId: string }) {
           const b = buckets.get(o)!;
           const pct = totalCents > 0 ? Math.round((b.cents / totalCents) * 100) : 0;
           const livePrice = priceMap.get(o);
+          const payoutPerWinner = b.count > 0 ? Math.floor(totalCents / b.count) : totalCents;
+          const multiplier = b.count > 0 && bet.stake_amount_cents > 0
+            ? (payoutPerWinner / bet.stake_amount_cents).toFixed(1)
+            : null;
           return (
             <div key={o} style={{ padding: "8px 10px", background: "#f5f5f5", border: "1px solid #ddd" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -360,25 +364,53 @@ export function BetDetail({ betId }: { betId: string }) {
                     </span>
                   )}
                 </div>
-                <span>{fmtCents(b.cents)} ({pct}%)</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span>{fmtCents(b.cents)} ({pct}%)</span>
+                  {b.count > 0 && totalCents > 0 && (
+                    <span style={{
+                      fontSize: 12,
+                      padding: "2px 8px",
+                      background: "#e8f5e9",
+                      border: "1px solid #a5d6a7",
+                      fontWeight: 600,
+                    }}>
+                      wins {fmtCents(payoutPerWinner)}{multiplier && <> ({multiplier}×)</>}
+                    </span>
+                  )}
+                </div>
               </div>
               {/* Visual bar */}
               <div style={{ height: 6, background: "#ddd", marginBottom: 4 }}>
                 <div style={{ height: "100%", width: `${pct}%`, background: "#000080", transition: "width 0.3s" }} />
               </div>
               {b.stakers.length > 0 && (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", opacity: 0.7 }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {b.stakers.map((s, i) => (
-                    <span key={i}>
-                      {s.label} · {fmtCents(s.cents)}
+                    <span
+                      key={i}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 4,
+                        padding: "2px 8px",
+                        background: "#fff",
+                        border: "1px solid #ccc",
+                        fontSize: 12,
+                      }}
+                    >
+                      <strong>{s.label}</strong>
+                      <span style={{ opacity: 0.7 }}>{fmtCents(s.cents)}</span>
                       {s.oddsAtStake != null && (
-                        <span style={{ fontSize: 10, marginLeft: 2, opacity: 0.8 }}>
+                        <span style={{ fontSize: 10, opacity: 0.6 }}>
                           @{Math.round(s.oddsAtStake * 100)}%
                         </span>
                       )}
                     </span>
                   ))}
                 </div>
+              )}
+              {b.count === 0 && (
+                <span style={{ opacity: 0.5, fontSize: 12 }}>No stakers yet</span>
               )}
             </div>
           );
@@ -393,17 +425,26 @@ export function BetDetail({ betId }: { betId: string }) {
         const oddsMovedFor = hasOdds && currentOdds > lockedOdds;  // market moved toward your pick
         const oddsMovedAgainst = hasOdds && currentOdds < lockedOdds;
         const shift = hasOdds ? Math.round((currentOdds - lockedOdds) * 100) : 0;
+        const myBucket = buckets.get(my_stake.outcome_chosen);
+        const myMaxPayout = myBucket && myBucket.count > 0 ? Math.floor(totalCents / myBucket.count) : 0;
+        const myMultiplier = bet.stake_amount_cents > 0 ? (myMaxPayout / bet.stake_amount_cents).toFixed(1) : null;
         return (
           <>
             <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
             <div style={{ padding: "10px 12px", background: "#f0f4ff", border: "1px solid #b0b8d0" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: hasOdds ? 8 : 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <div>
                   <strong>Your stake:</strong> {fmtCents(my_stake.amount_cents)} on <strong>{my_stake.outcome_chosen}</strong>
                 </div>
-                {lockedOdds != null && (
-                  <span style={{ fontSize: 12, opacity: 0.7 }}>
-                    {(1 / lockedOdds).toFixed(2)}× implied payout weight
+                {myMaxPayout > 0 && (
+                  <span style={{
+                    padding: "3px 10px",
+                    background: "#d4edda",
+                    border: "1px solid #28a745",
+                    fontWeight: 700,
+                    fontSize: 14,
+                  }}>
+                    Max win: {fmtCents(myMaxPayout)}{myMultiplier && <> ({myMultiplier}×)</>}
                   </span>
                 )}
               </div>
@@ -505,6 +546,24 @@ export function BetDetail({ betId }: { betId: string }) {
         <>
           <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
           <strong style={{ fontSize: 14 }}>Join this bet — {fmtCents(bet.stake_amount_cents)}</strong>
+          {outcome && (() => {
+            const b = buckets.get(outcome);
+            const futureStakers = (b?.count ?? 0) + 1;
+            const futurePool = totalCents + bet.stake_amount_cents;
+            const potentialWin = Math.floor(futurePool / futureStakers);
+            const multi = (potentialWin / bet.stake_amount_cents).toFixed(1);
+            return (
+              <div style={{
+                padding: "6px 10px",
+                background: "#e8f5e9",
+                border: "1px solid #a5d6a7",
+                fontSize: 13,
+                marginTop: 4,
+              }}>
+                If <strong>{outcome}</strong> wins, you get <strong>{fmtCents(potentialWin)}</strong> ({multi}×)
+              </div>
+            );
+          })()}
 
           <div className="field-row-stacked" style={{ gap: 4 }}>
             <label htmlFor="join-outcome">Pick your side</label>

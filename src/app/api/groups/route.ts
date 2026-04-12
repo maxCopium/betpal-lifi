@@ -125,7 +125,6 @@ export async function POST(request: Request): Promise<Response> {
         wallet_address: walletAddress,
         vault_address: vaultAddress,
         vault_chain_id: vaultChainId,
-        threshold: 2,
         status: "pending",
         member_count: membershipRows.length,
       },
@@ -148,7 +147,7 @@ export async function GET(request: Request): Promise<Response> {
     const { data, error } = await sb
       .from("group_members")
       .select(
-        "role, group:groups(id, name, wallet_address, vault_address, threshold, status, created_at)",
+        "role, group:groups(id, name, wallet_address, vault_address, status, created_at)",
       )
       .eq("user_id", me.id);
     if (error) throw new HttpError(500, `group list failed: ${error.message}`);

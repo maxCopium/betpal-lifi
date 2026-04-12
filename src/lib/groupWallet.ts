@@ -55,27 +55,6 @@ async function sendGroupTransaction(
 }
 
 /**
- * Send raw ETH from a group's Privy server wallet on Base.
- * Used for gas top-ups between wallets.
- */
-export async function sendGroupEth(
-  privyWalletId: string,
-  to: `0x${string}`,
-  valueWei: bigint,
-): Promise<`0x${string}`> {
-  const result = await privy().walletApi.ethereum.sendTransaction({
-    walletId: privyWalletId,
-    caip2: BASE_CAIP2,
-    transaction: {
-      to,
-      value: `0x${valueWei.toString(16)}`,
-      data: "0x",
-    },
-  });
-  return result.hash as `0x${string}`;
-}
-
-/**
  * Helper: encode + send a contract call from a group wallet.
  */
 export async function sendGroupContractCall(

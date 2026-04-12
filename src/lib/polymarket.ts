@@ -76,9 +76,11 @@ export async function trendingMarkets(limit = 10): Promise<PolymarketMarket[]> {
 }
 
 /**
- * Mock market registry. When a market_id starts with "mock:", we return
- * synthetic data instead of hitting Polymarket. Used for hackathon demos.
- * The `mockResolvedOutcome` field is set via the mock-resolve API route.
+ * Mock market support. When a market_id starts with "mock:", we return
+ * synthetic data instead of hitting Polymarket. Kept for backward
+ * compatibility with any existing mock: bets in the DB.
+ * New bets always use real Polymarket markets; resolution is via
+ * force-resolve (unanimous consent) if needed.
  */
 const MOCK_MARKETS: Record<string, { question: string; outcomes: string[] }> = {
   "mock:eth-5k": {
@@ -90,15 +92,10 @@ const MOCK_MARKETS: Record<string, { question: string; outcomes: string[] }> = {
     outcomes: ["Yes", "No"],
   },
   "mock:demo": {
-    question: "Demo bet — resolve with the taskbar button",
+    question: "Demo bet",
     outcomes: ["Yes", "No"],
   },
 };
-
-/** Return all mock markets as PolymarketMarket objects. */
-export function getAllMockMarkets(): PolymarketMarket[] {
-  return Object.keys(MOCK_MARKETS).map((id) => getMockMarketData(id)!);
-}
 
 export function isMockMarket(marketId: string): boolean {
   return marketId.startsWith("mock:");
@@ -149,11 +146,11 @@ export async function getMarket(marketId: string): Promise<PolymarketMarket> {
 export function isMarketSettleable(
   m: PolymarketMarket,
   now: Date = new Date(),
-  /** Manual override outcome from DB (set via /api/bets/[id]/mock-resolve). */
+  /** Manual override outcome from DB (set via force-resolve unanimous consent). */
   mockResolvedOutcome?: string | null,
 ): { settleable: boolean; winningOutcome?: string; reason?: string } {
   // Manual resolution override — works for ANY market (mock or real).
-  // Set via the taskbar resolve button for demo purposes.
+  // Set via force-resolve when all stakers unanimously agree on an outcome.
   if (mockResolvedOutcome) {
     return { settleable: true, winningOutcome: mockResolvedOutcome };
   }

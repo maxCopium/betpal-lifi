@@ -24,7 +24,6 @@ type GroupRow = {
   name: string;
   wallet_address: string | null;
   vault_address: string;
-  threshold: number;
   status: string;
   created_at: string;
 };
@@ -286,7 +285,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
         <div className="flex flex-col gap-3">
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <div><strong>Status:</strong> {group.status}</div>
-            <div><strong>Members:</strong> {members.length || group.threshold}</div>
+            <div><strong>Members:</strong> {members.length}</div>
           </div>
 
           {/* Member list */}

@@ -1,8 +1,7 @@
 "use client";
 
 /**
- * <Taskbar> — pinned bottom strip with Start button, window buttons, clock,
- * and a mock-resolve button for demo purposes.
+ * <Taskbar> — pinned bottom strip with Start button, window buttons, and clock.
  */
 import { useEffect, useState } from "react";
 import { useWindowManager } from "./WindowManager";
