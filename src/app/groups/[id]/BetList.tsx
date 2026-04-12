@@ -19,6 +19,7 @@ type BetRow = {
   status: string;
   resolution_outcome: string | null;
   created_at: string;
+  live_prices: Record<string, number> | null;
 };
 
 function formatDeadline(iso: string): string {
@@ -75,12 +76,34 @@ export function BetList({
           <Link href={`/bets/${b.id}`} style={{ fontWeight: 500 }}>
             {b.title}
           </Link>
-          <div style={{ marginTop: 4, display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ marginTop: 4, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <span className={`betpal-status ${STATUS_CLASS[b.status] ?? "betpal-status--info"}`}>
               {b.status}
             </span>
             {b.resolution_outcome && (
               <span style={{ fontWeight: 600 }}>{b.resolution_outcome}</span>
+            )}
+            {b.live_prices && !b.resolution_outcome && (
+              <span style={{ display: "inline-flex", gap: 4, fontSize: 11 }}>
+                {b.options.map((o) => {
+                  const p = b.live_prices?.[o];
+                  if (p == null) return null;
+                  const pct = Math.round(p * 100);
+                  return (
+                    <span
+                      key={o}
+                      style={{
+                        padding: "1px 5px",
+                        background: p >= 0.5 ? "#d4edda" : "#f0f0f0",
+                        border: "1px solid #ccc",
+                        fontWeight: p >= 0.5 ? 700 : 400,
+                      }}
+                    >
+                      {o} {pct}%
+                    </span>
+                  );
+                })}
+              </span>
             )}
             <span style={{ opacity: 0.6 }}>
               join by {formatDeadline(b.join_deadline)}

@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
-import { getMarket } from "@/lib/polymarket";
+import { getMarket, isMockMarket, getMockMarketData } from "@/lib/polymarket";
 
 /**
  * POST /api/groups/[id]/bets
@@ -161,7 +161,34 @@ export async function GET(
       .eq("group_id", groupId)
       .order("created_at", { ascending: false });
     if (error) throw new HttpError(500, `bet list failed: ${error.message}`);
-    return Response.json({ bets: data ?? [] });
+
+    // Enrich with live Polymarket prices (best-effort, parallel)
+    const bets = data ?? [];
+    const enriched = await Promise.all(
+      bets.map(async (b) => {
+        try {
+          const mid = b.polymarket_market_id as string;
+          let outcomes: string[] | null = null;
+          let prices: number[] = [];
+          if (isMockMarket(mid)) {
+            const mock = getMockMarketData(mid);
+            if (mock) {
+              outcomes = parseStringArray(mock.outcomes);
+              prices = (parseStringArray(mock.outcomePrices) ?? []).map(Number);
+            }
+          } else {
+            const m = await getMarket(mid);
+            outcomes = parseStringArray(m.outcomes);
+            prices = (parseStringArray(m.outcomePrices) ?? []).map(Number);
+          }
+          return { ...b, live_prices: outcomes && prices.length ? Object.fromEntries(outcomes.map((o, i) => [o, prices[i]])) : null };
+        } catch {
+          return { ...b, live_prices: null };
+        }
+      }),
+    );
+
+    return Response.json({ bets: enriched });
   } catch (e) {
     return errorResponse(e);
   }

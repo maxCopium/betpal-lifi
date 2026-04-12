@@ -9,6 +9,7 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
 import { CopyProgressDialog } from "@/components/win98/CopyProgressDialog";
 import { useDepositFlow, SOURCES } from "@/hooks/useDepositFlow";
+import { useMarketPrices } from "@/hooks/useMarketPrices";
 
 type Bet = {
   id: string;
@@ -76,6 +77,7 @@ export function BetDetail({ betId }: { betId: string }) {
   const [cancelVotes, setCancelVotes] = useState<{ votes: number; total: number } | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const flow = useDepositFlow();
+  const marketPrices = useMarketPrices(betId, data?.bet.status);
 
   const reload = useCallback(async () => {
     try {
@@ -207,6 +209,14 @@ export function BetDetail({ betId }: { betId: string }) {
     }
   }
 
+  // Build price lookup from Polymarket live data
+  const priceMap = new Map<string, number>();
+  if (marketPrices) {
+    marketPrices.outcomes.forEach((o, i) => {
+      if (i < marketPrices.prices.length) priceMap.set(o, marketPrices.prices[i]);
+    });
+  }
+
   const canJoin = !my_stake && bet.status === "open" && !joinPassed;
 
   return (
@@ -230,6 +240,45 @@ export function BetDetail({ betId }: { betId: string }) {
         </a>
       </div>
 
+      {/* Live Polymarket odds */}
+      {priceMap.size > 0 && (
+        <>
+          <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <strong style={{ fontSize: 13 }}>Polymarket odds</strong>
+            {bet.options.map((o) => {
+              const price = priceMap.get(o);
+              if (price == null) return null;
+              const pctLive = Math.round(price * 100);
+              const isLeading = price >= 0.5;
+              return (
+                <span
+                  key={o}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "3px 10px",
+                    border: "1px solid",
+                    borderColor: isLeading ? "var(--betpal-color-success)" : "#ccc",
+                    background: isLeading ? "#e6f4e6" : "#f5f5f5",
+                    fontWeight: isLeading ? 700 : 400,
+                    fontSize: 13,
+                  }}
+                >
+                  {o}
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>{pctLive}%</span>
+                </span>
+              );
+            })}
+            {marketPrices?.closed && (
+              <span style={{ opacity: 0.6, fontSize: 12 }}>Market closed</span>
+            )}
+            <span style={{ opacity: 0.4, fontSize: 11 }}>live</span>
+          </div>
+        </>
+      )}
+
       {/* Pool breakdown */}
       <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
       <strong style={{ fontSize: 14 }}>Pool — {fmtCents(totalCents)}</strong>
@@ -237,10 +286,24 @@ export function BetDetail({ betId }: { betId: string }) {
         {bet.options.map((o) => {
           const b = buckets.get(o)!;
           const pct = totalCents > 0 ? Math.round((b.cents / totalCents) * 100) : 0;
+          const livePrice = priceMap.get(o);
           return (
             <div key={o} style={{ padding: "8px 10px", background: "#f5f5f5", border: "1px solid #ddd" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                <strong>{o}</strong>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <strong>{o}</strong>
+                  {livePrice != null && (
+                    <span style={{
+                      fontSize: 11,
+                      padding: "1px 6px",
+                      background: livePrice >= 0.5 ? "#d4edda" : "#f0f0f0",
+                      border: "1px solid #ccc",
+                      opacity: 0.8,
+                    }}>
+                      {Math.round(livePrice * 100)}%
+                    </span>
+                  )}
+                </div>
                 <span>{fmtCents(b.cents)} ({pct}%)</span>
               </div>
               {/* Visual bar */}
