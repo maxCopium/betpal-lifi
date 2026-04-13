@@ -43,7 +43,7 @@ export type PolymarketMarket = z.infer<typeof MarketSchema>;
  * and reuse for every search until the TTL expires. This avoids 8 parallel
  * requests per keystroke and keeps us well under any rate limit.
  */
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours — events last months; new ones trickle in
 let cachedEvents: Record<string, unknown>[] = [];
 let cacheTimestamp = 0;
 
