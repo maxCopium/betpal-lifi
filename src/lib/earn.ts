@@ -44,18 +44,18 @@ const VaultSchema = z
       .object({
         apy: z
           .object({
-            base: z.number().optional(),
-            reward: z.number().optional(),
+            base: z.number().nullish(),
+            reward: z.number().nullish(),
             total: z.number(),
           })
           .passthrough()
-          .optional(),
+          .nullish(),
         tvl: z
           .object({
-            usd: z.union([z.string(), z.number()]).optional(),
+            usd: z.union([z.string(), z.number()]).nullish(),
           })
           .passthrough()
-          .optional(),
+          .nullish(),
       })
       .passthrough()
       .optional(),
