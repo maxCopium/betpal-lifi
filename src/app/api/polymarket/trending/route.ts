@@ -16,14 +16,17 @@ export async function GET(request: Request): Promise<Response> {
 
     const markets = await trendingMarkets(limit);
 
-    const projected = markets.map((m) => ({
-      id: m.id,
-      question: m.question,
-      slug: m.slug ?? null,
-      end_date: m.endDate ?? null,
-      closed: !!m.closed,
-      active: m.active ?? null,
-    }));
+    const now = new Date();
+    const projected = markets
+      .filter((m) => !m.endDate || new Date(m.endDate) >= now)
+      .map((m) => ({
+        id: m.id,
+        question: m.question,
+        slug: m.slug ?? null,
+        end_date: m.endDate ?? null,
+        closed: !!m.closed,
+        active: m.active ?? null,
+      }));
     return Response.json({ markets: projected });
   } catch (e) {
     return errorResponse(e);

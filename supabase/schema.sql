@@ -256,6 +256,10 @@ alter table transactions add column if not exists completed_at timestamptz;
 -- Rename legacy safe_address column to wallet_address
 DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='groups' AND column_name='safe_address') THEN ALTER TABLE groups RENAME COLUMN safe_address TO wallet_address; END IF; END $$;
 
+-- Max participants + start-when-full for bets
+alter table bets add column if not exists max_participants integer check (max_participants is null or max_participants >= 2);
+alter table bets add column if not exists start_when_full boolean not null default false;
+
 -- Force resolve proposal columns on bets
 alter table bets add column if not exists force_resolve_outcome text;
 alter table bets add column if not exists force_resolve_proposed_by uuid references users(id);
