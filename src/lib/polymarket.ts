@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { supabaseService } from "@/lib/supabase";
 
 /**
  * Polymarket Gamma API wrapper.
@@ -13,9 +14,6 @@ import { z } from "zod";
 
 const GAMMA = "https://gamma-api.polymarket.com";
 
-// The exact resolution-status field shape needs verification on Day 0.
-// Below is a tolerant schema that accepts the documented fields and stashes
-// the rest in `passthrough()` so we don't crash on field renames.
 const MarketSchema = z
   .object({
     id: z.union([z.string(), z.number()]).transform(String),
@@ -28,8 +26,6 @@ const MarketSchema = z
     endDate: z.string().optional(),
     outcomes: z.union([z.array(z.string()), z.string()]).optional(),
     outcomePrices: z.union([z.array(z.string()), z.string()]).optional(),
-    // Real API uses plural `umaResolutionStatuses` — a JSON-encoded string
-    // array like '["resolved"]' or '[]'. Verified against live Gamma API.
     umaResolutionStatuses: z.string().optional(),
     resolvedBy: z.string().optional(),
     acceptingOrders: z.boolean().optional(),
@@ -38,43 +34,27 @@ const MarketSchema = z
 
 export type PolymarketMarket = z.infer<typeof MarketSchema>;
 
-/**
- * Event cache with pre-computed search index. Uses Next.js data cache
- * (revalidate) so Vercel persists responses across cold starts. In-memory
- * layer avoids re-parsing on warm instances.
- */
-type SearchEntry = {
-  event: Record<string, unknown>;
-  market: Record<string, unknown>;
-  primary: string;   // title + question (boosted)
-  blob: string;      // full JSON (broad match)
-};
+// ── Search via Supabase polymarket_cache table ────────────────────────
 
-let searchIndex: SearchEntry[] = [];
-let indexTimestamp = 0;
-const INDEX_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
-
-async function fetchOpenEvents(pageLimit: number, offset: number): Promise<unknown[]> {
+async function fetchOpenEvents(limit: number, offset: number): Promise<unknown[]> {
   const url = new URL(`${GAMMA}/events`);
-  url.searchParams.set("limit", String(pageLimit));
+  url.searchParams.set("limit", String(limit));
   url.searchParams.set("offset", String(offset));
   url.searchParams.set("closed", "false");
   const res = await fetch(url.toString(), {
     headers: { accept: "application/json" },
-    next: { revalidate: 14400 }, // 4h — Vercel data cache persists across cold starts
+    cache: "no-store",
   });
   if (!res.ok) return [];
   const json = await res.json();
   return Array.isArray(json) ? json : (json.data ?? []);
 }
 
-async function getSearchIndex(): Promise<SearchEntry[]> {
-  const now = Date.now();
-  if (searchIndex.length > 0 && now - indexTimestamp < INDEX_TTL_MS) {
-    return searchIndex;
-  }
-  // Fetch all pages in parallel. Smaller pages (200) return faster from Gamma
-  // (~1.5s vs ~5s for 500). 15 pages × 200 = 3000 events covers all Hormuz etc.
+/**
+ * Fetch all open events from Gamma and upsert into polymarket_cache.
+ * Called by /api/polymarket/warmup on page load.
+ */
+export async function warmSearchIndex(): Promise<number> {
   const PAGE = 200;
   const PAGES = 15;
   const pages = await Promise.all(
@@ -82,64 +62,100 @@ async function getSearchIndex(): Promise<SearchEntry[]> {
   );
   const allEvents = pages.flat() as Record<string, unknown>[];
 
-  // Pre-compute search strings once so each query only does string matching.
-  const entries: SearchEntry[] = [];
+  // Flatten events → market rows for upsert.
+  type CacheRow = {
+    market_id: string;
+    question: string;
+    slug: string | null;
+    end_date: string | null;
+    closed: boolean;
+    active: boolean;
+    search_text: string;
+    updated_at: string;
+  };
+  const rows: CacheRow[] = [];
+  const now = new Date().toISOString();
+
   for (const event of allEvents) {
     const children = Array.isArray(event.markets) ? event.markets : [];
     const eventTitle = ((event.title as string) ?? "").toLowerCase();
-    const eventBlob = JSON.stringify(event).toLowerCase();
+    const eventDesc = ((event.description as string) ?? "").toLowerCase();
 
     for (const m of children as Record<string, unknown>[]) {
-      const question = ((m.question as string) ?? "").toLowerCase();
-      if (!m.slug && event.slug) m.slug = event.slug;
-      entries.push({
-        event,
-        market: m,
-        primary: `${eventTitle} ${question}`,
-        blob: `${eventBlob} ${JSON.stringify(m).toLowerCase()}`,
+      const id = String(m.id ?? "");
+      if (!id) continue;
+      const question = ((m.question as string) ?? "");
+      const marketDesc = ((m.description as string) ?? "").toLowerCase();
+      rows.push({
+        market_id: id,
+        question,
+        slug: (m.slug as string) || (event.slug as string) || null,
+        end_date: (m.endDate as string) ?? null,
+        closed: !!m.closed,
+        active: m.active !== false,
+        search_text: `${eventTitle} ${question.toLowerCase()} ${eventDesc} ${marketDesc}`,
+        updated_at: now,
       });
     }
   }
 
-  searchIndex = entries;
-  indexTimestamp = now;
-  console.log(`[polymarket] indexed ${entries.length} markets from ${allEvents.length} events`);
-  return searchIndex;
+  // Upsert in chunks of 500 to stay under payload limits.
+  const sb = supabaseService();
+  const CHUNK = 500;
+  let upserted = 0;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    const { error } = await sb
+      .from("polymarket_cache")
+      .upsert(chunk, { onConflict: "market_id" });
+    if (error) {
+      console.error(`[polymarket/warmup] upsert chunk ${i} failed:`, error.message);
+    } else {
+      upserted += chunk.length;
+    }
+  }
+
+  console.log(`[polymarket/warmup] upserted ${upserted} markets from ${allEvents.length} events`);
+  return upserted;
 }
 
-/** Pre-warm the search index. Returns the number of indexed markets. */
-export async function warmSearchIndex(): Promise<number> {
-  const idx = await getSearchIndex();
-  return idx.length;
-}
-
+/**
+ * Search polymarket_cache using ilike. Instant on any cold start because
+ * the data lives in Supabase, not in-memory.
+ */
 export async function searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
-  const index = await getSearchIndex();
-
-  // Tokenize query. Drop stop-words (< 3 chars) that match everything.
   const terms = query
     .toLowerCase()
     .split(/\s+/)
     .filter((t) => t.length >= 3);
 
-  if (terms.length === 0) {
-    return z.array(MarketSchema).parse([]);
+  if (terms.length === 0) return [];
+
+  const sb = supabaseService();
+
+  // Build an ilike filter: every term must appear in search_text.
+  let q = sb
+    .from("polymarket_cache")
+    .select("market_id, question, slug, end_date, closed, active")
+    .limit(limit);
+
+  for (const term of terms) {
+    q = q.ilike("search_text", `%${term}%`);
   }
 
-  // Score against pre-computed strings — fast string matching, no JSON.stringify per query.
-  type Hit = { market: unknown; score: number };
-  const hits: Hit[] = [];
+  const { data, error } = await q;
+  if (error) throw new Error(`polymarket search failed: ${error.message}`);
+  if (!data || data.length === 0) return [];
 
-  for (const entry of index) {
-    const broadHits = terms.filter((t) => entry.blob.includes(t)).length;
-    if (broadHits === 0) continue;
-    // Title/question matches worth 3x more than deep-blob matches.
-    const titleHits = terms.filter((t) => entry.primary.includes(t)).length;
-    hits.push({ market: entry.market, score: titleHits * 3 + (broadHits - titleHits) });
-  }
-
-  hits.sort((a, b) => b.score - a.score);
-  return z.array(MarketSchema).parse(hits.slice(0, limit).map((h) => h.market));
+  // Map DB rows to PolymarketMarket shape.
+  return data.map((row) => ({
+    id: row.market_id,
+    question: row.question,
+    slug: row.slug ?? undefined,
+    endDate: row.end_date ?? undefined,
+    closed: row.closed,
+    active: row.active,
+  }));
 }
 
 export async function trendingMarkets(limit = 10): Promise<PolymarketMarket[]> {

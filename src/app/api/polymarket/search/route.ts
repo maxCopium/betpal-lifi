@@ -2,23 +2,11 @@ import "server-only";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { searchMarkets } from "@/lib/polymarket";
 
-// Hobby plan allows up to 60s. First search builds the index (~20s cold start).
-export const maxDuration = 60;
-
 /**
  * GET /api/polymarket/search?q=<query>&limit=<n>
  *
- * Thin proxy in front of Polymarket's Gamma /markets endpoint. We do this on
- * the server (rather than calling Gamma directly from the browser) for two
- * reasons:
- *
- *   1. The endpoint is rate-limited and we want a single egress identity.
- *   2. We can layer caching + filtering later (e.g. drop archived markets,
- *      drop markets without binary outcomes) without touching every caller.
- *
- * Auth: caller must be a signed-in user. Search is read-only but Polymarket
- * data is the substrate of every bet, so we gate it behind the same auth
- * boundary as the rest of the API.
+ * Searches the polymarket_cache table (populated by /api/polymarket/warmup).
+ * Instant even on cold starts — no Gamma API calls needed.
  */
 export async function GET(request: Request): Promise<Response> {
   try {
@@ -33,8 +21,7 @@ export async function GET(request: Request): Promise<Response> {
 
     const markets = await searchMarkets(q, limit);
 
-    // Project to a small, stable shape so the UI doesn't depend on Gamma's
-    // full passthrough payload.
+    // searchMarkets already returns the projected shape.
     const projected = markets.map((m) => ({
       id: m.id,
       question: m.question,
