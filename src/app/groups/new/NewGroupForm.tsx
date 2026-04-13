@@ -84,11 +84,13 @@ export function NewGroupForm() {
         const data = await authedFetch<{ vaults: VaultOption[] }>(
           `/api/earn/vaults?chainId=${BASE_CHAIN_ID}&asset=USDC&limit=10`,
         );
-        if (!cancelled) {
+        if (!cancelled && data.vaults.length > 0) {
           setVaults(data.vaults);
-          if (data.vaults.length > 0) setSelectedVault(data.vaults[0]);
+          setSelectedVault(data.vaults[0]);
         }
-      } catch {}
+      } catch (err) {
+        if (!cancelled) setError(`Failed to load vaults: ${(err as Error).message}`);
+      }
       finally {
         if (!cancelled) setVaultsLoading(false);
       }
@@ -185,7 +187,22 @@ export function NewGroupForm() {
         {vaultsLoading ? (
           <p style={{ opacity: 0.6 }}>Loading yield opportunities...</p>
         ) : vaults.length === 0 ? (
-          <p style={{ opacity: 0.6 }}>Using default Morpho USDC vault on Base.</p>
+          <div style={{ padding: 8 }}>
+            <p style={{ opacity: 0.6, margin: 0 }}>Could not load vaults.</p>
+            <button type="button" style={{ marginTop: 6 }} onClick={() => {
+              setVaultsLoading(true);
+              setError(null);
+              authedFetch<{ vaults: VaultOption[] }>(
+                `/api/earn/vaults?chainId=${BASE_CHAIN_ID}&asset=USDC&limit=10`,
+              ).then((data) => {
+                if (data.vaults.length > 0) {
+                  setVaults(data.vaults);
+                  setSelectedVault(data.vaults[0]);
+                }
+              }).catch((err) => setError(`Failed to load vaults: ${(err as Error).message}`))
+                .finally(() => setVaultsLoading(false));
+            }}>Retry</button>
+          </div>
         ) : (
           <div
             className="sunken-panel"

@@ -16,10 +16,11 @@ export function shortAddr(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-/** Format APY decimal (0.05 = 5%) as percentage string. */
+/** Format APY as percentage string. LI.FI Earn returns values already as
+ *  percentages (e.g. 4.68 = 4.68%), so no multiplication needed. */
 export function fmtApy(apy: number | null): string {
   if (apy === null) return "-- %";
-  return `${(apy * 100).toFixed(2)}%`;
+  return `${apy.toFixed(2)}%`;
 }
 
 /** Format an ISO date to "Apr 12, 3:00 PM" form. */
