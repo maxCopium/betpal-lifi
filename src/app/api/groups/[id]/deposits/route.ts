@@ -55,18 +55,28 @@ const Body = z
  * If toAmountUSD is missing, we cannot safely derive cents from vault share units,
  * so we reject the quote.
  */
+/**
+ * Derive ledger cents from the Composer quote.
+ *
+ * When toToken is a vault, LI.FI's toAmountUSD reflects the vault share's
+ * secondary-market price (often wildly wrong for low-liquidity AMM pools),
+ * NOT the underlying USDC value. fromAmountUSD is the actual USDC value
+ * being deposited, so we use the higher of the two — they should be similar
+ * for well-priced vaults, and fromAmountUSD is the floor for a 1:1 USDC vault.
+ */
 function quoteToAmountCents(quote: LifiQuote): number {
-  if (!quote.estimate.toAmountUSD) {
+  const est = quote.estimate as Record<string, unknown>;
+  const toUsd = parseFloat(String(est.toAmountUSD ?? "0"));
+  const fromUsd = parseFloat(String(est.fromAmountUSD ?? "0"));
+  // Use whichever is higher — for vault deposits, fromAmountUSD is reliable
+  const usd = Math.max(toUsd, fromUsd);
+  if (!Number.isFinite(usd) || usd <= 0) {
     throw new Error(
-      "Composer quote missing toAmountUSD — cannot derive ledger cents from vault share units",
+      `Composer quote has no usable USD value (from=${est.fromAmountUSD}, to=${est.toAmountUSD})`,
     );
   }
-  const usd = parseFloat(quote.estimate.toAmountUSD);
-  if (!Number.isFinite(usd) || usd < 0) {
-    throw new Error(`Composer toAmountUSD is invalid: ${quote.estimate.toAmountUSD}`);
-  }
   if (usd > 1_000_000) {
-    throw new Error(`Composer toAmountUSD suspiciously large: $${usd} — rejecting`);
+    throw new Error(`Composer USD suspiciously large: $${usd} — rejecting`);
   }
   return Math.round(usd * 100);
 }
