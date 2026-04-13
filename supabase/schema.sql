@@ -296,9 +296,12 @@ DO $$ BEGIN
     ));
 END $$;
 
--- Rename polymarket_markets_cache → polymarket_cache + add search columns
+-- Drop legacy polymarket_markets_cache if polymarket_cache already exists
 DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'polymarket_markets_cache') THEN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'polymarket_markets_cache')
+     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'polymarket_cache') THEN
+    DROP TABLE polymarket_markets_cache;
+  ELSIF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'polymarket_markets_cache') THEN
     ALTER TABLE polymarket_markets_cache RENAME TO polymarket_cache;
   END IF;
 END $$;
