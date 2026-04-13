@@ -9,7 +9,7 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
 import { CopyProgressDialog } from "@/components/win98/CopyProgressDialog";
 import { useDepositFlow } from "@/hooks/useDepositFlow";
-import { useDepositSources } from "@/hooks/useDepositSources";
+import { useWalletHoldings } from "@/hooks/useWalletHoldings";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { fmtCents, formatDate } from "@/lib/format";
 
@@ -82,7 +82,7 @@ export function BetDetail({ betId }: { betId: string }) {
   const [forceOutcome, setForceOutcome] = useState("");
   const [forceSubmitting, setForceSubmitting] = useState(false);
   const flow = useDepositFlow();
-  const { sources: depositSources, loading: sourcesLoading } = useDepositSources(data?.vault_address ?? undefined);
+  const { holdings, loading: holdingsLoading } = useWalletHoldings();
   const marketPrices = useMarketPrices(betId, data?.bet.status);
 
   const reload = useCallback(async () => {
@@ -180,9 +180,9 @@ export function BetDetail({ betId }: { betId: string }) {
         setError("No wallet available — sign in first");
         return;
       }
-      const src = depositSources[sourceIdx];
+      const src = holdings[sourceIdx];
       if (!src) {
-        setError("No deposit source selected");
+        setError("No token selected — do you have funds in your wallet?");
         return;
       }
       await flow.execute({
@@ -623,13 +623,15 @@ export function BetDetail({ betId }: { betId: string }) {
           {!hasBalance && (
             <div className="field-row-stacked" style={{ gap: 4 }}>
               <label htmlFor="join-source">Pay from</label>
-              {sourcesLoading ? (
-                <p style={{ opacity: 0.6, margin: 0 }}>Loading deposit options...</p>
+              {holdingsLoading ? (
+                <p style={{ opacity: 0.6, margin: 0 }}>Scanning wallet...</p>
+              ) : holdings.length === 0 ? (
+                <p style={{ opacity: 0.6, margin: 0, color: "#c00" }}>No tokens found in wallet</p>
               ) : (
                 <select id="join-source" value={sourceIdx} onChange={(e) => setSourceIdx(Number(e.target.value))}>
-                  {depositSources.map((s, i) => (
-                    <option key={`${s.chainId}-${s.token}`} value={i}>
-                      {s.symbol} · {s.chainName}
+                  {holdings.map((h, i) => (
+                    <option key={`${h.chainId}-${h.token}`} value={i}>
+                      {h.symbol} · {h.chainName} — {Number(h.balanceFormatted).toFixed(2)} (${h.valueUSD.toFixed(2)})
                     </option>
                   ))}
                 </select>
@@ -675,7 +677,7 @@ export function BetDetail({ betId }: { betId: string }) {
         title="Depositing & betting..."
         status={flow.status}
         progress={flow.progress}
-        fromLabel={depositSources[sourceIdx] ? `${depositSources[sourceIdx].symbol} · ${depositSources[sourceIdx].chainName}` : "..."}
+        fromLabel={holdings[sourceIdx] ? `${holdings[sourceIdx].symbol} · ${holdings[sourceIdx].chainName}` : "..."}
         toLabel={`Bet: ${outcome || "..."}`}
         onClose={flow.reset}
       />
