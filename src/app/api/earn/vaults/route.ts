@@ -41,6 +41,7 @@ export async function GET(request: Request): Promise<Response> {
 
     return Response.json({ vaults: projected });
   } catch (e) {
+    console.error("[earn/vaults] error:", (e as Error).message, (e as Error).stack?.slice(0, 500));
     return errorResponse(e);
   }
 }
