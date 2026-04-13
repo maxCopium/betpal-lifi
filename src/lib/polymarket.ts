@@ -79,7 +79,9 @@ export async function searchMarkets(query: string, limit = 20): Promise<Polymark
     for (const m of children as Record<string, unknown>[]) {
       if (m.closed) continue;
       const question = ((m.question as string) ?? "").toLowerCase();
-      const text = `${eventTitle} ${question}`;
+      const eventDesc = ((event.description as string) ?? "").toLowerCase();
+      const marketDesc = ((m.description as string) ?? "").toLowerCase();
+      const text = `${eventTitle} ${question} ${eventDesc} ${marketDesc}`;
 
       // Count how many query terms match.
       const hits = terms.filter((t) => text.includes(t)).length;
