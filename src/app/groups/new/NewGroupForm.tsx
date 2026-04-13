@@ -33,6 +33,13 @@ type VaultOption = {
   asset: string;
   apy: number | null;
   tvl_usd: number | null;
+  risk?: "low" | "medium" | "high";
+};
+
+const RISK_LABEL: Record<string, { text: string; color: string }> = {
+  low: { text: "Low risk", color: "#080" },
+  medium: { text: "Med risk", color: "#b80" },
+  high: { text: "High risk", color: "#c00" },
 };
 
 function friendLabel(f: FriendResult): string {
@@ -191,6 +198,7 @@ export function NewGroupForm() {
                   <th>Protocol</th>
                   <th>APY</th>
                   <th>TVL</th>
+                  <th>Risk</th>
                 </tr>
               </thead>
               <tbody>
@@ -235,6 +243,13 @@ export function NewGroupForm() {
                       </td>
                       <td style={{ opacity: 0.7 }}>
                         {fmtTvl(v.tvl_usd)}
+                      </td>
+                      <td>
+                        {v.risk && (
+                          <span style={{ color: isSelected ? "#fff" : RISK_LABEL[v.risk].color, fontWeight: 600, fontSize: 11 }}>
+                            {RISK_LABEL[v.risk].text}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
