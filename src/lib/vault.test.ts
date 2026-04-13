@@ -77,7 +77,6 @@ describe("redeemFromVault", () => {
     const expectedUsdc = BigInt(500) * CENTS_TO_USDC_UNITS; // 5_000_000n
     expect(expectedUsdc).toBe(BigInt(5_000_000));
 
-    mockReadContract.mockResolvedValueOnce(BigInt(5_000_000)); // convertToShares
     mockSendGroupContractCall.mockResolvedValue("0xmockhash" as `0x${string}`);
 
     const result = await redeemFromVault(
@@ -92,22 +91,7 @@ describe("redeemFromVault", () => {
     expect(result.transferTxHash).toBe("0xmockhash");
   });
 
-  it("throws when shares needed is 0", async () => {
-    mockReadContract.mockResolvedValueOnce(BigInt(0)); // convertToShares → 0
-
-    await expect(
-      redeemFromVault(
-        "privy-wallet-1",
-        "0xvault",
-        "0xwallet",
-        1, // 1 cent
-        "0xrecipient",
-      ),
-    ).rejects.toThrow("converts to 0 vault shares");
-  });
-
-  it("calls redeem then transfer in sequence", async () => {
-    mockReadContract.mockResolvedValueOnce(BigInt(1000)); // convertToShares
+  it("calls withdraw then transfer in sequence", async () => {
     mockSendGroupContractCall
       .mockResolvedValueOnce("0xredeem" as `0x${string}`)
       .mockResolvedValueOnce("0xtransfer" as `0x${string}`);
@@ -120,8 +104,8 @@ describe("redeemFromVault", () => {
       "0xrecipient",
     );
 
-    // First call is redeem, second is transfer
-    expect(mockSendGroupContractCall.mock.calls[0][3]).toBe("redeem");
+    // First call is withdraw (not redeem), second is transfer
+    expect(mockSendGroupContractCall.mock.calls[0][3]).toBe("withdraw");
     expect(mockSendGroupContractCall.mock.calls[1][3]).toBe("transfer");
     expect(result.redeemTxHash).toBe("0xredeem");
     expect(result.transferTxHash).toBe("0xtransfer");
@@ -142,7 +126,6 @@ describe("redeemFromVault", () => {
   });
 
   it("throws PartialRedeemError when transfer fails after redeem", async () => {
-    mockReadContract.mockResolvedValueOnce(BigInt(1000)); // convertToShares
     mockSendGroupContractCall
       .mockResolvedValueOnce("0xredeem" as `0x${string}`) // redeem succeeds
       .mockRejectedValueOnce(new Error("transfer failed")) // first transfer fails
@@ -160,7 +143,6 @@ describe("redeemFromVault", () => {
   });
 
   it("retries transfer once on failure", async () => {
-    mockReadContract.mockResolvedValueOnce(BigInt(1000)); // convertToShares
     mockSendGroupContractCall
       .mockResolvedValueOnce("0xredeem" as `0x${string}`) // redeem
       .mockRejectedValueOnce(new Error("nonce too low")) // first transfer fails

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useWallets } from "@privy-io/react-auth";
+import { authedFetch } from "@/lib/clientFetch";
 
 export type TokenBalance = {
   symbol: string;
@@ -33,11 +34,9 @@ export function useWalletBalances() {
     }
     setLoading(true);
     try {
-      const res = await fetch(
+      const json = await authedFetch<{ balances: TokenBalance[] }>(
         `/api/wallet/balance?address=${wallet.address}`,
       );
-      if (!res.ok) throw new Error("fetch failed");
-      const json = (await res.json()) as { balances: TokenBalance[] };
       setBalances(json.balances);
     } catch {
       setBalances([]);

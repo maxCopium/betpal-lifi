@@ -8,7 +8,8 @@ import { useCallback, useEffect, useState } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
 import { CopyProgressDialog } from "@/components/win98/CopyProgressDialog";
-import { useDepositFlow, SOURCES } from "@/hooks/useDepositFlow";
+import { useDepositFlow } from "@/hooks/useDepositFlow";
+import { useDepositSources } from "@/hooks/useDepositSources";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { fmtCents, formatDate } from "@/lib/format";
 
@@ -46,6 +47,7 @@ type DetailResponse = {
   stakes: Stake[];
   my_stake: Stake | null;
   free_balance_cents: number;
+  vault_address: string | null;
 };
 
 
@@ -80,6 +82,7 @@ export function BetDetail({ betId }: { betId: string }) {
   const [forceOutcome, setForceOutcome] = useState("");
   const [forceSubmitting, setForceSubmitting] = useState(false);
   const flow = useDepositFlow();
+  const { sources: depositSources, loading: sourcesLoading } = useDepositSources(data?.vault_address ?? undefined);
   const marketPrices = useMarketPrices(betId, data?.bet.status);
 
   const reload = useCallback(async () => {
@@ -177,9 +180,19 @@ export function BetDetail({ betId }: { betId: string }) {
         setError("No wallet available — sign in first");
         return;
       }
+      const src = depositSources[sourceIdx];
+      if (!src) {
+        setError("No deposit source selected");
+        return;
+      }
       await flow.execute({
         groupId: bet.group_id,
-        source: SOURCES[sourceIdx],
+        source: {
+          label: `${src.symbol} · ${src.chainName}`,
+          chainId: src.chainId,
+          token: src.token as `0x${string}`,
+          decimals: src.decimals,
+        },
         amount: stakeUsd,
         wallet,
         betId: bet.id,
@@ -610,11 +623,17 @@ export function BetDetail({ betId }: { betId: string }) {
           {!hasBalance && (
             <div className="field-row-stacked" style={{ gap: 4 }}>
               <label htmlFor="join-source">Pay from</label>
-              <select id="join-source" value={sourceIdx} onChange={(e) => setSourceIdx(Number(e.target.value))}>
-                {SOURCES.map((s, i) => (
-                  <option key={s.label} value={i}>{s.label}</option>
-                ))}
-              </select>
+              {sourcesLoading ? (
+                <p style={{ opacity: 0.6, margin: 0 }}>Loading deposit options...</p>
+              ) : (
+                <select id="join-source" value={sourceIdx} onChange={(e) => setSourceIdx(Number(e.target.value))}>
+                  {depositSources.map((s, i) => (
+                    <option key={`${s.chainId}-${s.token}`} value={i}>
+                      {s.symbol} · {s.chainName}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 
@@ -656,7 +675,7 @@ export function BetDetail({ betId }: { betId: string }) {
         title="Depositing & betting..."
         status={flow.status}
         progress={flow.progress}
-        fromLabel={SOURCES[sourceIdx].label}
+        fromLabel={depositSources[sourceIdx] ? `${depositSources[sourceIdx].symbol} · ${depositSources[sourceIdx].chainName}` : "..."}
         toLabel={`Bet: ${outcome || "..."}`}
         onClose={flow.reset}
       />

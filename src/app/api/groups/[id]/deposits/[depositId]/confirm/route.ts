@@ -118,27 +118,39 @@ export async function POST(
             if (amountCents < stakeAmountCents) {
               stakeStatus = "skipped_insufficient";
             } else {
-              const { error: stakeErr } = await sb.from("stakes").insert({
+              const { data: stakeRow, error: stakeErr } = await sb.from("stakes").insert({
                 bet_id: tx.intended_bet_id,
                 user_id: me.id,
                 outcome_chosen: tx.intended_outcome,
                 amount_cents: stakeAmountCents,
-              });
+              }).select("id").single();
               if (stakeErr?.code === "23505") {
                 stakeStatus = "skipped_duplicate";
               } else if (stakeErr) {
                 stakeStatus = "skipped_error";
               } else {
-                // Lock the bet's stake amount in ledger (not the full deposit).
-                await addBalanceEvent({
-                  groupId,
-                  userId: me.id,
-                  deltaCents: -stakeAmountCents,
-                  reason: "stake_lock",
-                  betId: tx.intended_bet_id,
-                  idempotencyKey: `stake_lock:${tx.intended_bet_id}:${me.id}`,
-                });
-                stakeStatus = "created";
+                // Re-check bet status after insert to close TOCTOU window.
+                const { data: freshBet } = await sb
+                  .from("bets")
+                  .select("status")
+                  .eq("id", tx.intended_bet_id)
+                  .single();
+                if (!freshBet || freshBet.status !== "open") {
+                  // Bet closed during deposit — roll back the stake.
+                  await sb.from("stakes").delete().eq("id", stakeRow.id);
+                  stakeStatus = "skipped_closed";
+                } else {
+                  // Lock the bet's stake amount in ledger (not the full deposit).
+                  await addBalanceEvent({
+                    groupId,
+                    userId: me.id,
+                    deltaCents: -stakeAmountCents,
+                    reason: "stake_lock",
+                    betId: tx.intended_bet_id,
+                    idempotencyKey: `stake_lock:${tx.intended_bet_id}:${me.id}`,
+                  });
+                  stakeStatus = "created";
+                }
               }
             }
           }

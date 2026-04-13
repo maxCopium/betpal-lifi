@@ -3,33 +3,12 @@
 import { useState, useCallback } from "react";
 import { authedFetch } from "@/lib/clientFetch";
 import { toBaseUnits } from "@/lib/amounts";
-import {
-  BASE_CHAIN_ID, USDC_BASE,
-  POLYGON_CHAIN_ID, USDC_POLYGON,
-} from "@/lib/constants";
-
 export type SourceChoice = {
   label: string;
   chainId: number;
   token: `0x${string}`;
   decimals: number;
 };
-
-/** Legacy hardcoded sources — kept as fallback if dynamic fetch fails. */
-export const SOURCES: SourceChoice[] = [
-  {
-    label: "USDC · Base",
-    chainId: BASE_CHAIN_ID,
-    token: USDC_BASE,
-    decimals: 6,
-  },
-  {
-    label: "USDC · Polygon",
-    chainId: POLYGON_CHAIN_ID,
-    token: USDC_POLYGON,
-    decimals: 6,
-  },
-];
 
 type QuoteResponse = {
   depositId: string;

@@ -170,15 +170,26 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   try {
-    await requireUser(request);
+    const me = await requireUser(request);
     const { id: betId } = await params;
     const sb = supabaseService();
 
     const { data: bet } = await sb
       .from("bets")
-      .select("force_resolve_outcome, force_resolve_proposed_by")
+      .select("group_id, force_resolve_outcome, force_resolve_proposed_by")
       .eq("id", betId)
       .single();
+
+    if (!bet) throw new HttpError(404, "bet not found");
+
+    // Membership gate.
+    const { data: membership } = await sb
+      .from("group_members")
+      .select("user_id")
+      .eq("group_id", bet.group_id)
+      .eq("user_id", me.id)
+      .maybeSingle();
+    if (!membership) throw new HttpError(403, "not a member of this bet's group");
 
     if (!bet?.force_resolve_outcome) {
       return Response.json({ pending: false });

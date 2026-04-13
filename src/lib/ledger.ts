@@ -27,7 +27,9 @@ export type AddBalanceEventInput = {
     | "payout"
     | "yield_credit"
     | "reconciliation"
-    | "adjustment";
+    | "adjustment"
+    | "withdrawal_reserve"
+    | "withdrawal_reverse";
   betId?: string;
   txHash?: string;
   /**
@@ -63,9 +65,11 @@ export async function addBalanceEvent(
     throw new Error("deltaCents must be an integer");
   }
   // Guard against overdraw: if this is a debit, verify the user's total
-  // balance won't go negative. Skip for system-level adjustments that are
-  // part of atomic reserve/reverse pairs (withdrawals, auto-payouts).
-  if (input.deltaCents < 0 && input.reason !== "adjustment") {
+  // balance won't go negative. Skip only for system-level operations:
+  // - adjustment: auto-payout debits after resolution (server-only)
+  // - withdrawal_reverse: credit-back on failed withdrawal (always positive)
+  const SKIP_OVERDRAW: Set<string> = new Set(["adjustment", "withdrawal_reverse"]);
+  if (input.deltaCents < 0 && !SKIP_OVERDRAW.has(input.reason)) {
     const currentBalance = await getUserGroupBalanceCents(input.groupId, input.userId);
     if (currentBalance + input.deltaCents < 0) {
       throw new Error(

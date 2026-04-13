@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { authedFetch } from "@/lib/clientFetch";
 
 type VaultInfo = {
   name?: string;
@@ -23,11 +24,9 @@ export function useVaultInfo(chainId: number, vaultAddress: string) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(
+        const json = await authedFetch<VaultInfo>(
           `/api/earn/vault?chainId=${chainId}&address=${vaultAddress}`,
         );
-        if (!res.ok) throw new Error("fetch failed");
-        const json = (await res.json()) as VaultInfo;
         if (!cancelled) setInfo(json);
       } catch {
         // silent — vault info is optional

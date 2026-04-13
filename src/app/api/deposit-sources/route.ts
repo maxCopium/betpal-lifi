@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorResponse, requireUser } from "@/lib/auth";
 import { getChains, getConnections } from "@/lib/composer";
 import { BASE_CHAIN_ID } from "@/lib/constants";
 
@@ -35,10 +36,10 @@ export type DepositSource = {
 };
 
 export async function GET(req: NextRequest) {
-  const toChain = req.nextUrl.searchParams.get("toChain") ?? String(BASE_CHAIN_ID);
-  const toToken = req.nextUrl.searchParams.get("toToken");
-
   try {
+    await requireUser(req);
+    const toChain = req.nextUrl.searchParams.get("toChain") ?? String(BASE_CHAIN_ID);
+    const toToken = req.nextUrl.searchParams.get("toToken");
     // 1) Fetch all LI.FI chains (cached 5 min)
     const allChains = await getChains();
     const chainMap = new Map(allChains.map((c) => [c.id, c]));
@@ -103,9 +104,6 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message, sources: [] },
-      { status: 500 },
-    );
+    return errorResponse(err);
   }
 }

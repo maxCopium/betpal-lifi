@@ -136,15 +136,22 @@ export async function POST(
       throw new HttpError(500, `stake insert failed: ${stakeErr?.message}`);
     }
 
-    // Lock the stake amount in the ledger.
-    await addBalanceEvent({
-      groupId: bet.group_id as string,
-      userId: me.id,
-      deltaCents: -stakeAmount,
-      reason: "stake_lock",
-      betId,
-      idempotencyKey: `stake_lock:${betId}:${me.id}`,
-    });
+    // Lock the stake amount in the ledger. If this fails, delete the orphaned
+    // stake row so the DB stays consistent.
+    try {
+      await addBalanceEvent({
+        groupId: bet.group_id as string,
+        userId: me.id,
+        deltaCents: -stakeAmount,
+        reason: "stake_lock",
+        betId,
+        idempotencyKey: `stake_lock:${betId}:${me.id}`,
+      });
+    } catch (ledgerErr) {
+      // Roll back the stake insert to prevent orphaned rows.
+      await sb.from("stakes").delete().eq("id", stake.id);
+      throw ledgerErr;
+    }
 
     // Auto-lock bet when full (start_when_full mode).
     let autoLocked = false;

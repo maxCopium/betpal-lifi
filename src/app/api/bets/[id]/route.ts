@@ -97,7 +97,19 @@ export async function GET(
       );
     }
 
-    return Response.json({ bet, stakes, my_stake: myStake, free_balance_cents: freeBalanceCents });
+    // Include the group's vault address so the frontend can discover valid
+    // deposit sources (chain + token combos that route to this vault).
+    let vaultAddress: string | null = null;
+    try {
+      const { data: grp } = await sb
+        .from("groups")
+        .select("vault_address")
+        .eq("id", bet.group_id)
+        .single();
+      vaultAddress = (grp?.vault_address as string) ?? null;
+    } catch { /* non-critical */ }
+
+    return Response.json({ bet, stakes, my_stake: myStake, free_balance_cents: freeBalanceCents, vault_address: vaultAddress });
   } catch (e) {
     return errorResponse(e);
   }

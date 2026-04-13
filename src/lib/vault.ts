@@ -97,23 +97,15 @@ export async function redeemFromVault(
 
   const usdcAmount = BigInt(amountCents) * CENTS_TO_USDC_UNITS;
 
-  const sharesNeeded = (await publicClient.readContract({
-    address: vaultAddress,
-    abi: ERC4626_ABI,
-    functionName: "convertToShares",
-    args: [usdcAmount],
-  })) as bigint;
-
-  if (sharesNeeded <= BigInt(0)) {
-    throw new Error(`cannot redeem: ${amountCents} cents converts to 0 vault shares`);
-  }
-
+  // Use withdraw(assets) instead of redeem(shares) to get exact USDC output.
+  // redeem(shares) can lose dust due to share→asset rounding; withdraw(assets)
+  // burns however many shares are needed to produce exactly `usdcAmount`.
   const redeemTxHash = await sendGroupContractCall(
     privyWalletId,
     vaultAddress,
     ERC4626_ABI,
-    "redeem",
-    [sharesNeeded, groupWalletAddress, groupWalletAddress],
+    "withdraw",
+    [usdcAmount, groupWalletAddress, groupWalletAddress],
   );
   await publicClient.waitForTransactionReceipt({ hash: redeemTxHash });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { authedFetch } from "@/lib/clientFetch";
 import type { DepositSource } from "@/app/api/deposit-sources/route";
 import {
   BASE_CHAIN_ID, USDC_BASE,
@@ -41,9 +42,7 @@ export function useDepositSources(toToken?: string) {
       try {
         const params = new URLSearchParams({ toChain: String(BASE_CHAIN_ID) });
         if (toToken) params.set("toToken", toToken);
-        const res = await fetch(`/api/deposit-sources?${params}`);
-        if (!res.ok) throw new Error("fetch failed");
-        const json = (await res.json()) as { sources: DepositSource[] };
+        const json = await authedFetch<{ sources: DepositSource[] }>(`/api/deposit-sources?${params}`);
         if (!cancelled && json.sources.length > 0) {
           setSources(json.sources);
         }

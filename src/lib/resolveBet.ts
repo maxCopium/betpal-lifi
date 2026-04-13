@@ -235,7 +235,25 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
   }
 
   // ── Auto-payout (best-effort) ──
-  const allPayouts = result.payouts.filter((p) => p.amountCents > 0);
+  // Include yield in the payout amount so winners get principal + yield.
+  const yieldByUser = new Map<string, number>();
+  if (yieldCredited > 0) {
+    // Re-read yield events we just wrote to get per-user amounts.
+    const { data: yieldEvents } = await sb
+      .from("balance_events")
+      .select("user_id, delta_cents")
+      .eq("reason", "yield_credit")
+      .eq("bet_id", betId);
+    for (const e of yieldEvents ?? []) {
+      yieldByUser.set(e.user_id as string, Number(e.delta_cents));
+    }
+  }
+  const allPayouts = result.payouts
+    .filter((p) => p.amountCents > 0)
+    .map((p) => ({
+      ...p,
+      totalCents: p.amountCents + (yieldByUser.get(p.userId) ?? 0),
+    }));
   let groupData: { privy_wallet_id: string; wallet_address: string; vault_address: string } | null = null;
   if (allPayouts.length > 0) {
     const { data: gw } = await sb
@@ -269,14 +287,14 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
         groupData.privy_wallet_id,
         groupData.vault_address as `0x${string}`,
         groupData.wallet_address as `0x${string}`,
-        p.amountCents,
+        p.totalCents,
         user.wallet_address as `0x${string}`,
       );
 
       await addBalanceEvent({
         groupId,
         userId: p.userId,
-        deltaCents: -p.amountCents,
+        deltaCents: -p.totalCents,
         reason: "adjustment",
         betId,
         idempotencyKey: `auto_payout:${betId}:${p.userId}`,
@@ -293,7 +311,7 @@ export async function resolveBetIfPossible(betId: string): Promise<ResolveResult
         await addBalanceEvent({
           groupId,
           userId: p.userId,
-          deltaCents: -p.amountCents,
+          deltaCents: -p.totalCents,
           reason: "adjustment",
           betId,
           idempotencyKey: `auto_payout:${betId}:${p.userId}`,

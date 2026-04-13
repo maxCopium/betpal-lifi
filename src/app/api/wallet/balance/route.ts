@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { errorResponse, requireUser } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { basePublicClient } from "@/lib/viem";
 import { erc20Abi, formatUnits, getAddress, isAddress } from "viem";
@@ -57,11 +58,17 @@ async function getLifiTokens(): Promise<TokenInfo[]> {
 }
 
 export async function GET(req: NextRequest) {
+  try {
+  const me = await requireUser(req);
   const address = req.nextUrl.searchParams.get("address");
   if (!address || !isAddress(address)) {
     return NextResponse.json({ error: "invalid address" }, { status: 400 });
   }
+  // Only allow querying the caller's own wallet address.
   const wallet = getAddress(address);
+  if (wallet.toLowerCase() !== me.walletAddress.toLowerCase()) {
+    return NextResponse.json({ error: "can only query your own wallet" }, { status: 403 });
+  }
 
   // 1) Get token list from LI.FI
   const lifiTokens = await getLifiTokens();
@@ -164,4 +171,7 @@ export async function GET(req: NextRequest) {
   });
 
   return NextResponse.json({ balances, source: "lifi-tokens+multicall" });
+  } catch (err) {
+    return errorResponse(err);
+  }
 }

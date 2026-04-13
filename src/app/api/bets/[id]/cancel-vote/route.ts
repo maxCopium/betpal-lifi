@@ -107,7 +107,7 @@ export async function POST(
         });
       }
 
-      // Void the bet.
+      // Void the bet — status guard prevents voiding already-settled bets.
       await sb
         .from("bets")
         .update({
@@ -115,7 +115,8 @@ export async function POST(
           resolution_outcome: null,
           settled_at: new Date().toISOString(),
         })
-        .eq("id", betId);
+        .eq("id", betId)
+        .in("status", ["open", "locked", "resolving"]);
 
       return Response.json({
         voted: true,
@@ -142,9 +143,24 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   try {
-    await requireUser(request);
+    const me = await requireUser(request);
     const { id: betId } = await params;
     const sb = supabaseService();
+
+    // Membership gate via bet's group.
+    const { data: bet } = await sb
+      .from("bets")
+      .select("group_id")
+      .eq("id", betId)
+      .maybeSingle();
+    if (!bet) throw new HttpError(404, "bet not found");
+    const { data: membership } = await sb
+      .from("group_members")
+      .select("user_id")
+      .eq("group_id", bet.group_id)
+      .eq("user_id", me.id)
+      .maybeSingle();
+    if (!membership) throw new HttpError(403, "not a member of this bet's group");
 
     const { data: allStakers } = await sb
       .from("stakes")

@@ -39,7 +39,9 @@ export async function GET(request: Request): Promise<Response> {
     }
 
     // Escape PostgREST special chars to prevent filter injection via .or().
-    const escaped = q.replace(/[\\%_]/g, "\\$&");
+    // Commas and parens can break the .or() filter syntax; dots affect operators.
+    const escaped = q.replace(/[\\%_]/g, "\\$&").replace(/[,().]/g, "");
+    if (!escaped.trim()) return Response.json({ users: [] });
     const pattern = `%${escaped}%`;
     const { data, error } = await sb
       .from("users")

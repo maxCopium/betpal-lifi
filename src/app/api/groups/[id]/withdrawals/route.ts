@@ -76,11 +76,12 @@ export async function POST(
     const withdrawalId = randomUUID();
 
     // Reserve funds immediately so concurrent withdrawals can't double-spend.
+    // Uses withdrawal_reserve which goes through overdraw guard.
     await addBalanceEvent({
       groupId,
       userId: me.id,
       deltaCents: -body.amountCents,
-      reason: "adjustment",
+      reason: "withdrawal_reserve",
       idempotencyKey: `withdrawal_reserve:${withdrawalId}`,
     });
 
@@ -155,7 +156,7 @@ export async function POST(
         groupId,
         userId: me.id,
         deltaCents: body.amountCents,
-        reason: "adjustment",
+        reason: "withdrawal_reverse",
         idempotencyKey: `withdrawal_reverse:${withdrawalId}`,
       });
       await sb

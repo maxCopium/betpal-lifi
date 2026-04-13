@@ -16,17 +16,26 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   try {
-    await requireUser(request);
+    const me = await requireUser(request);
     const { id: betId } = await params;
 
     const sb = supabaseService();
     const { data: bet, error: betErr } = await sb
       .from("bets")
-      .select("polymarket_market_id, options")
+      .select("polymarket_market_id, options, group_id")
       .eq("id", betId)
       .maybeSingle();
     if (betErr) throw new HttpError(500, betErr.message);
     if (!bet) throw new HttpError(404, "bet not found");
+
+    // Membership gate: caller must be in the bet's group.
+    const { data: membership } = await sb
+      .from("group_members")
+      .select("user_id")
+      .eq("group_id", bet.group_id)
+      .eq("user_id", me.id)
+      .maybeSingle();
+    if (!membership) throw new HttpError(403, "not a member of this bet's group");
 
     const marketId = bet.polymarket_market_id as string;
     let outcomes: string[] = [];

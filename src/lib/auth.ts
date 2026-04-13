@@ -117,8 +117,9 @@ export function errorResponse(e: unknown): Response {
     return Response.json({ error: e.message }, { status: e.status });
   }
   console.error("[api] unhandled error", e);
+  // Don't leak internal error details to the client.
   return Response.json(
-    { error: (e as Error).message ?? "internal error" },
+    { error: "internal error" },
     { status: 500 },
   );
 }
