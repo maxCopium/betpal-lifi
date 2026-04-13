@@ -20,7 +20,12 @@ export function PrivyAppProvider({ children }: { children: ReactNode }) {
   useEffect(() => setMounted(true), []);
 
   const appId = publicEnv.privyAppId;
-  if (!appId || !mounted) {
+  if (!mounted) {
+    // Don't render children until client-side mount so that Privy hooks
+    // (useWallets, usePrivy, etc.) never fire outside the provider context.
+    return null;
+  }
+  if (!appId) {
     return <>{children}</>;
   }
   return (
