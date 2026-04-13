@@ -107,6 +107,12 @@ async function getSearchIndex(): Promise<SearchEntry[]> {
   return searchIndex;
 }
 
+/** Pre-warm the search index. Returns the number of indexed markets. */
+export async function warmSearchIndex(): Promise<number> {
+  const idx = await getSearchIndex();
+  return idx.length;
+}
+
 export async function searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
   const index = await getSearchIndex();
 

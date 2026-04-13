@@ -149,6 +149,10 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
     }
   }
 
+  // Fire-and-forget: warm the Polymarket search index on page load so
+  // searches are instant when the user opens the New Bet dialog.
+  useEffect(() => { fetch("/api/polymarket/warmup").catch(() => {}); }, []);
+
   useEffect(() => {
     if (!ready || !authenticated) return;
     let cancelled = false;
