@@ -155,7 +155,24 @@ export async function getComposerQuote(p: QuoteParams): Promise<LifiQuote> {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`LI.FI /quote failed: ${res.status} ${body.slice(0, 500)}`);
+    // Parse LI.FI error JSON for a human-friendly message.
+    try {
+      const err = JSON.parse(body) as {
+        message?: string;
+        errors?: { filteredOut?: { reason?: string }[] };
+      };
+      const reasons = err.errors?.filteredOut?.map((e) => e.reason).filter(Boolean) ?? [];
+      const priceImpact = reasons.find((r) => r?.includes("Price impact"));
+      if (priceImpact) {
+        throw new Error(
+          "Amount too small for this token — swap price impact exceeds 10%. Try a larger amount or deposit USDC directly.",
+        );
+      }
+      if (err.message) throw new Error(err.message);
+    } catch (e) {
+      if (e instanceof Error && !e.message.startsWith("LI.FI")) throw e;
+    }
+    throw new Error(`LI.FI /quote failed: ${res.status} ${body.slice(0, 300)}`);
   }
   const json = await res.json();
   return QuoteResponse.parse(json);
