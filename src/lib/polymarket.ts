@@ -73,10 +73,12 @@ async function getSearchIndex(): Promise<SearchEntry[]> {
   if (searchIndex.length > 0 && now - indexTimestamp < INDEX_TTL_MS) {
     return searchIndex;
   }
-  // Fetch all pages in parallel (500 per page, 8 pages = 4000 max).
-  const PAGE = 500;
+  // Fetch all pages in parallel. Smaller pages (200) return faster from Gamma
+  // (~1.5s vs ~5s for 500). 15 pages × 200 = 3000 events covers all Hormuz etc.
+  const PAGE = 200;
+  const PAGES = 15;
   const pages = await Promise.all(
-    Array.from({ length: 8 }, (_, i) => fetchOpenEvents(PAGE, i * PAGE)),
+    Array.from({ length: PAGES }, (_, i) => fetchOpenEvents(PAGE, i * PAGE)),
   );
   const allEvents = pages.flat() as Record<string, unknown>[];
 

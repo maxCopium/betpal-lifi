@@ -2,6 +2,9 @@ import "server-only";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { searchMarkets } from "@/lib/polymarket";
 
+// Hobby plan allows up to 60s. First search builds the index (~20s cold start).
+export const maxDuration = 60;
+
 /**
  * GET /api/polymarket/search?q=<query>&limit=<n>
  *
