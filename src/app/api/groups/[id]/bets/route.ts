@@ -116,8 +116,13 @@ export async function POST(
     const maxResolution = new Date(marketEnd + MAX_RESOLUTION_BUFFER_MS).toISOString();
 
     // Best-effort cache write — don't fail bet creation if cache write fails.
-    await sb.from("polymarket_markets_cache").upsert({
+    await sb.from("polymarket_cache").upsert({
       market_id: body.polymarket_market_id,
+      question: market.question,
+      slug: market.slug,
+      end_date: market.endDate ?? null,
+      closed: !!market.closed,
+      active: market.active ?? null,
       payload_json: market,
       last_synced: new Date().toISOString(),
     });

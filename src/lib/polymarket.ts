@@ -140,6 +140,7 @@ export async function searchMarkets(query: string, limit = 20): Promise<Polymark
     .from("polymarket_cache")
     .select("market_id, question, slug, end_date, closed, active")
     .textSearch("search_text", tsQuery, { type: "plain", config: "english" })
+    .or(`end_date.is.null,end_date.gte.${new Date().toISOString()}`)
     .limit(limit);
   if (error) throw new Error(`polymarket search failed: ${error.message}`);
   if (!data || data.length === 0) return [];

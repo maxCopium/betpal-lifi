@@ -22,17 +22,15 @@ export async function GET(request: Request): Promise<Response> {
     const markets = await searchMarkets(q, limit);
 
     // searchMarkets already returns the projected shape.
-    const now = new Date();
-    const projected = markets
-      .filter((m) => !m.endDate || new Date(m.endDate) >= now)
-      .map((m) => ({
-        id: m.id,
-        question: m.question,
-        slug: m.slug ?? null,
-        end_date: m.endDate ?? null,
-        closed: !!m.closed,
-        active: m.active ?? null,
-      }));
+    // end_date filtering is done at the DB level in searchMarkets
+    const projected = markets.map((m) => ({
+      id: m.id,
+      question: m.question,
+      slug: m.slug ?? null,
+      end_date: m.endDate ?? null,
+      closed: !!m.closed,
+      active: m.active ?? null,
+    }));
     return Response.json({ markets: projected });
   } catch (e) {
     return errorResponse(e);

@@ -147,7 +147,8 @@ create table if not exists balance_events (
   reason          text not null
                     check (reason in
                       ('deposit','stake_lock','stake_refund','payout',
-                       'yield_credit','reconciliation','adjustment')),
+                       'yield_credit','reconciliation','adjustment',
+                       'withdrawal_reserve','withdrawal_reverse')),
   bet_id          uuid references bets(id),
   tx_hash         text,
   idempotency_key text not null unique,
@@ -190,15 +191,27 @@ create index if not exists transactions_group_idx on transactions(group_id);
 create index if not exists transactions_status_idx on transactions(status);
 
 -- =============================================================================
--- POLYMARKET MARKETS CACHE
+-- POLYMARKET CACHE  (search index + resolution tracking)
 -- =============================================================================
-create table if not exists polymarket_markets_cache (
+create table if not exists polymarket_cache (
   market_id           text primary key,
+  question            text,
+  slug                text,
+  end_date            timestamptz,
+  closed              boolean not null default false,
+  active              boolean,
+  search_text         text,
   payload_json        jsonb not null,
   resolution_status   text,
   resolution_outcome  text,
-  last_synced         timestamptz not null default now()
+  last_synced         timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
 );
+
+create index if not exists polymarket_cache_search_idx
+  on polymarket_cache using gin (search_text gin_trgm_ops);
+create index if not exists polymarket_cache_end_date_idx
+  on polymarket_cache (end_date) where end_date is not null;
 
 -- =============================================================================
 -- INVITE LINKS
@@ -271,3 +284,32 @@ create table if not exists force_resolve_votes (
   created_at  timestamptz not null default now(),
   primary key (bet_id, user_id)
 );
+
+-- Expand balance_events reason constraint to include withdrawal reasons
+DO $$ BEGIN
+  ALTER TABLE balance_events DROP CONSTRAINT IF EXISTS balance_events_reason_check;
+  ALTER TABLE balance_events ADD CONSTRAINT balance_events_reason_check
+    CHECK (reason IN (
+      'deposit','stake_lock','stake_refund','payout',
+      'yield_credit','reconciliation','adjustment',
+      'withdrawal_reserve','withdrawal_reverse'
+    ));
+END $$;
+
+-- Rename polymarket_markets_cache → polymarket_cache + add search columns
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'polymarket_markets_cache') THEN
+    ALTER TABLE polymarket_markets_cache RENAME TO polymarket_cache;
+  END IF;
+END $$;
+ALTER TABLE polymarket_cache ADD COLUMN IF NOT EXISTS question text;
+ALTER TABLE polymarket_cache ADD COLUMN IF NOT EXISTS slug text;
+ALTER TABLE polymarket_cache ADD COLUMN IF NOT EXISTS end_date timestamptz;
+ALTER TABLE polymarket_cache ADD COLUMN IF NOT EXISTS closed boolean NOT NULL DEFAULT false;
+ALTER TABLE polymarket_cache ADD COLUMN IF NOT EXISTS active boolean;
+ALTER TABLE polymarket_cache ADD COLUMN IF NOT EXISTS search_text text;
+ALTER TABLE polymarket_cache ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+CREATE INDEX IF NOT EXISTS polymarket_cache_search_idx
+  ON polymarket_cache USING gin (search_text gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS polymarket_cache_end_date_idx
+  ON polymarket_cache (end_date) WHERE end_date IS NOT NULL;
