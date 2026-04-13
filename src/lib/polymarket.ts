@@ -76,12 +76,17 @@ export async function searchMarkets(query: string, limit = 20): Promise<Polymark
     const eventTitle = ((event.title as string) ?? "").toLowerCase();
     const children = Array.isArray(event.markets) ? event.markets : [];
 
+    // Stringify the entire event once for broad keyword matching.
+    // This catches terms that live in lesser-known fields (e.g. resolution
+    // sources, tags, comments) which wouldn't be found by checking only
+    // title/question/description.
+    const eventBlob = JSON.stringify(event).toLowerCase();
+
     for (const m of children as Record<string, unknown>[]) {
       if (m.closed) continue;
       const question = ((m.question as string) ?? "").toLowerCase();
-      const eventDesc = ((event.description as string) ?? "").toLowerCase();
-      const marketDesc = ((m.description as string) ?? "").toLowerCase();
-      const text = `${eventTitle} ${question} ${eventDesc} ${marketDesc}`;
+      const marketBlob = JSON.stringify(m).toLowerCase();
+      const text = `${eventBlob} ${question} ${marketBlob}`;
 
       // Count how many query terms match.
       const hits = terms.filter((t) => text.includes(t)).length;
