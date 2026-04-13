@@ -22,7 +22,12 @@ type QuoteResponse = {
       gasLimit?: string;
       gasPrice?: string;
     };
-    estimate: { toAmount: string; toAmountMin: string; executionDuration?: number };
+    estimate: {
+      toAmount: string;
+      toAmountMin: string;
+      executionDuration?: number;
+      approvalAddress?: string;
+    };
   };
 };
 
@@ -108,7 +113,7 @@ export function useDepositFlow(): DepositFlowState {
         { method: "POST", body: JSON.stringify(quoteBody) },
       );
 
-      // Phase 2: switch chain + sign.
+      // Phase 2: switch chain + approve + sign.
       setStatus("Switching wallet to source chain…");
       try {
         await wallet.switchChain(source.chainId);
@@ -116,8 +121,42 @@ export function useDepositFlow(): DepositFlowState {
         console.warn("switchChain failed (continuing):", err);
       }
 
-      setStatus("Awaiting signature…");
       const provider = await wallet.getEthereumProvider();
+      const NATIVE = "0x0000000000000000000000000000000000000000";
+      const approvalAddress = quoteRes.quote.estimate.approvalAddress;
+
+      // ERC-20 approval: check current allowance and approve if needed.
+      if (
+        approvalAddress &&
+        source.token.toLowerCase() !== NATIVE
+      ) {
+        setStatus("Checking token allowance…");
+        // ERC-20 allowance(owner, spender) selector = 0xdd62ed3e
+        const allowanceData =
+          "0xdd62ed3e" +
+          wallet.address.slice(2).padStart(64, "0") +
+          approvalAddress.slice(2).padStart(64, "0");
+        const allowanceHex = (await provider.request({
+          method: "eth_call",
+          params: [{ to: source.token, data: allowanceData }, "latest"],
+        })) as string;
+        const allowance = BigInt(allowanceHex || "0x0");
+        const needed = BigInt(fromAmount);
+        if (allowance < needed) {
+          setStatus("Approving token spend…");
+          // approve(spender, uint256.max) selector = 0x095ea7b3
+          const approveData =
+            "0x095ea7b3" +
+            approvalAddress.slice(2).padStart(64, "0") +
+            "f".repeat(64); // max uint256
+          await provider.request({
+            method: "eth_sendTransaction",
+            params: [{ from: wallet.address, to: source.token, data: approveData }],
+          });
+        }
+      }
+
+      setStatus("Awaiting signature…");
       const txParams = {
         from: wallet.address,
         to: quoteRes.quote.transactionRequest.to,
