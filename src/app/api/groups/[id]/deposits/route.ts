@@ -145,6 +145,15 @@ export async function POST(
     });
 
     // Derive cents from the Composer quote's USD value.
+    console.log("[deposit quote]", {
+      fromAmount: body.fromAmount,
+      fromToken: body.fromToken,
+      toToken: vaultAddress,
+      toAmount: quote.estimate.toAmount,
+      toAmountMin: quote.estimate.toAmountMin,
+      toAmountUSD: quote.estimate.toAmountUSD,
+      fromAmountUSD: (quote.estimate as Record<string, unknown>).fromAmountUSD,
+    });
     const amountCents = quoteToAmountCents(quote);
     if (amountCents <= 0) {
       throw new HttpError(400, "quote toAmountMin too small to credit any cents");
@@ -193,7 +202,7 @@ export async function POST(
       throw new HttpError(500, `tx insert failed: ${txErr.message}`);
     }
 
-    return Response.json({ depositId: txRow.id, quote }, { status: 201 });
+    return Response.json({ depositId: txRow.id, quote, amountCents }, { status: 201 });
   } catch (e) {
     return errorResponse(e);
   }
