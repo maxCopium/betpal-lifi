@@ -38,37 +38,63 @@ const MarketSchema = z
 
 export type PolymarketMarket = z.infer<typeof MarketSchema>;
 
-export async function searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
-  // Gamma /markets?search= is unreliable (often ignores query).
-  // Search via /events instead and flatten child markets.
+/**
+ * Gamma's search= param is broken (ignores the query). We fetch open events
+ * in bulk and filter server-side by matching query words against event titles
+ * and child market questions. Results are cached for 60s via Next fetch cache.
+ */
+async function fetchOpenEvents(pageLimit: number, offset: number): Promise<unknown[]> {
   const url = new URL(`${GAMMA}/events`);
-  url.searchParams.set("limit", String(Math.min(limit, 20)));
+  url.searchParams.set("limit", String(pageLimit));
+  url.searchParams.set("offset", String(offset));
   url.searchParams.set("closed", "false");
-  if (query) url.searchParams.set("search", query);
   const res = await fetch(url.toString(), {
     headers: { accept: "application/json" },
     next: { revalidate: 60 },
   });
-  if (!res.ok) {
-    throw new Error(`Polymarket /events search failed: ${res.status}`);
-  }
+  if (!res.ok) return [];
   const json = await res.json();
-  const events = Array.isArray(json) ? json : (json.data ?? []);
-  // Flatten: each event has a `markets` array of child markets.
-  const markets: unknown[] = [];
-  for (const event of events) {
+  return Array.isArray(json) ? json : (json.data ?? []);
+}
+
+export async function searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
+  // Fetch 2 pages of events in parallel (~1000 events, <1s).
+  const [page1, page2] = await Promise.all([
+    fetchOpenEvents(500, 0),
+    fetchOpenEvents(500, 500),
+  ]);
+  const allEvents = [...page1, ...page2] as Record<string, unknown>[];
+
+  // Tokenize query for matching.
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+
+  // Score and filter events by how well they match the query.
+  type ScoredMarket = { market: unknown; score: number };
+  const scored: ScoredMarket[] = [];
+
+  for (const event of allEvents) {
+    const eventTitle = ((event.title as string) ?? "").toLowerCase();
     const children = Array.isArray(event.markets) ? event.markets : [];
-    if (children.length > 0) {
-      // Add child markets (each is a tradeable market with its own question).
-      for (const m of children) {
-        if (m.closed) continue;
-        // Inherit slug from event if market doesn't have one.
-        if (!m.slug && event.slug) m.slug = event.slug;
-        markets.push(m);
-      }
+
+    for (const m of children as Record<string, unknown>[]) {
+      if (m.closed) continue;
+      const question = ((m.question as string) ?? "").toLowerCase();
+      const text = `${eventTitle} ${question}`;
+
+      // Count how many query terms match.
+      const hits = terms.filter((t) => text.includes(t)).length;
+      if (hits === 0) continue;
+
+      // Inherit slug from event if market doesn't have one.
+      if (!m.slug && event.slug) m.slug = event.slug;
+      scored.push({ market: m, score: hits });
     }
   }
-  return z.array(MarketSchema).parse(markets.slice(0, limit));
+
+  // Sort by match quality (most terms matched first).
+  scored.sort((a, b) => b.score - a.score);
+
+  return z.array(MarketSchema).parse(scored.slice(0, limit).map((s) => s.market));
 }
 
 export async function trendingMarkets(limit = 10): Promise<PolymarketMarket[]> {
