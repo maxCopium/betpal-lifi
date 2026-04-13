@@ -68,7 +68,7 @@ function quoteToAmountCents(quote: LifiQuote): number {
   if (usd > 1_000_000) {
     throw new Error(`Composer toAmountUSD suspiciously large: $${usd} — rejecting`);
   }
-  return Math.floor(usd * 100);
+  return Math.round(usd * 100);
 }
 
 export async function POST(
