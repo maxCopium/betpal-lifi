@@ -116,10 +116,8 @@ export function errorResponse(e: unknown): Response {
   if (e instanceof HttpError) {
     return Response.json({ error: e.message }, { status: e.status });
   }
-  console.error("[api] unhandled error", e);
-  // Don't leak internal error details to the client.
-  return Response.json(
-    { error: "internal error" },
-    { status: 500 },
-  );
+  const msg = e instanceof Error ? e.message : String(e);
+  console.error("[api] unhandled error", msg);
+  // Surface the error message so the client can show what went wrong.
+  return Response.json({ error: msg }, { status: 500 });
 }
