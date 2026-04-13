@@ -69,10 +69,15 @@ export async function POST(
     }
 
     // Validate new vault on LI.FI Earn
-    const detail = await getVaultDetail({
-      chainId: Number(group.vault_chain_id),
-      address: newVault,
-    });
+    let detail;
+    try {
+      detail = await getVaultDetail({
+        chainId: Number(group.vault_chain_id),
+        address: newVault,
+      });
+    } catch (err) {
+      throw new HttpError(502, `failed to validate vault via LI.FI: ${(err as Error).message}`);
+    }
     const underlying = detail.underlyingTokens?.[0]?.address?.toLowerCase();
     if (underlying !== USDC_BASE.toLowerCase()) {
       throw new HttpError(400, "new vault must use USDC as underlying asset");
