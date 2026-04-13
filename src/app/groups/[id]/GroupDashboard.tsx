@@ -101,6 +101,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   const [gas, setGas] = useState<GasResponse | null>(null);
   const [sendingGas, setSendingGas] = useState(false);
   const [gasMsg, setGasMsg] = useState<string | null>(null);
+  const [gasEthInput, setGasEthInput] = useState("0.00005");
   const { wallets } = useWallets();
   const [betterVaults, setBetterVaults] = useState<VaultOption[]>([]);
   const [proposal, setProposal] = useState<VaultProposal | null>(null);
@@ -272,9 +273,14 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
     }
   }
 
-  // Send ~$0.50 worth of ETH from user's wallet to group wallet for gas.
+  // Send user-specified ETH from user's wallet to group wallet for gas.
   async function sendGas() {
     if (!gas?.wallet_address) return;
+    const ethAmount = parseFloat(gasEthInput);
+    if (!Number.isFinite(ethAmount) || ethAmount <= 0) {
+      setGasMsg("Enter a valid ETH amount");
+      return;
+    }
     setSendingGas(true);
     setGasMsg(null);
     try {
@@ -282,13 +288,14 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
       if (!w) throw new Error("No wallet found — sign in first");
       try { await w.switchChain(BASE_CHAIN_ID); } catch { /* continue */ }
       const provider = await w.getEthereumProvider();
-      // Send 0.0002 ETH (~$0.50 at ~$2500/ETH, covers ~100+ Base txs)
-      const value = "0x" + (BigInt("200000000000000")).toString(16); // 0.0002 ETH
+      // Convert ETH to wei
+      const wei = BigInt(Math.round(ethAmount * 1e18));
+      const value = "0x" + wei.toString(16);
       const txHash = await provider.request({
         method: "eth_sendTransaction",
         params: [{ from: w.address, to: gas.wallet_address, value }],
       });
-      setGasMsg(`Gas sent! Tx: ${String(txHash).slice(0, 14)}…`);
+      setGasMsg(`Sent ${ethAmount} ETH! Tx: ${String(txHash).slice(0, 14)}…`);
       // Refresh gas balance after a few seconds
       setTimeout(async () => {
         try {
@@ -389,13 +396,22 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
                 >
                   Copy
                 </button>
+                <input
+                  type="number"
+                  step="0.00001"
+                  min="0.00001"
+                  value={gasEthInput}
+                  onChange={(e) => setGasEthInput(e.target.value)}
+                  style={{ width: 80, fontSize: 10, padding: "1px 4px" }}
+                  placeholder="ETH"
+                />
                 <button
                   type="button"
                   style={{ fontSize: 10, padding: "1px 6px", whiteSpace: "nowrap", background: "#000080", color: "#fff" }}
                   disabled={sendingGas}
                   onClick={sendGas}
                 >
-                  {sendingGas ? "Sending…" : "Send gas"}
+                  {sendingGas ? "Sending…" : "Send"}
                 </button>
               </div>
               {gasMsg && <div style={{ marginTop: 4, fontSize: 11 }}>{gasMsg}</div>}
@@ -421,13 +437,22 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
                     >
                       Copy
                     </button>
+                    <input
+                      type="number"
+                      step="0.00001"
+                      min="0.00001"
+                      value={gasEthInput}
+                      onChange={(e) => setGasEthInput(e.target.value)}
+                      style={{ width: 80, fontSize: 10, padding: "1px 4px" }}
+                      placeholder="ETH"
+                    />
                     <button
                       type="button"
                       style={{ fontSize: 10, padding: "1px 6px", whiteSpace: "nowrap", background: "#000080", color: "#fff" }}
                       disabled={sendingGas}
                       onClick={sendGas}
                     >
-                      {sendingGas ? "Sending…" : "Send gas"}
+                      {sendingGas ? "Sending…" : "Send"}
                     </button>
                   </div>
                   {gasMsg && <div style={{ marginTop: 4, fontSize: 11 }}>{gasMsg}</div>}
