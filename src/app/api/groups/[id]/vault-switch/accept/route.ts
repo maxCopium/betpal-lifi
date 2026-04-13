@@ -43,8 +43,11 @@ export async function POST(
     if (!group.pending_vault_address) {
       throw new HttpError(409, "no vault switch proposal pending");
     }
-    if (!group.wallet_address || !group.privy_wallet_id) {
-      throw new HttpError(409, "group wallet not initialized");
+    if (!group.wallet_address) {
+      throw new HttpError(409, "group wallet address not set");
+    }
+    if (!group.privy_wallet_id) {
+      throw new HttpError(409, "group wallet signing key not set (privy_wallet_id missing)");
     }
 
     // 4-eye: accepter must be different from proposer
