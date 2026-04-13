@@ -68,6 +68,7 @@ type VaultOption = {
   apy: number | null;
   tvl_usd: number | null;
   protocol: string;
+  risk?: "low" | "medium" | "high";
 };
 
 type VaultProposal = {
@@ -200,25 +201,25 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   }, [ready, authenticated, loadProposal]);
 
   useEffect(() => {
-    if (!vaultInfo?.apy || !group?.vault_address) return;
+    if (!group?.vault_address) return;
     let cancelled = false;
     (async () => {
       try {
         const data = await authedFetch<{ vaults: VaultOption[] }>(
-          `/api/earn/vaults?chainId=${BASE_CHAIN_ID}&asset=USDC&limit=5`,
+          `/api/earn/vaults?chainId=${BASE_CHAIN_ID}&asset=USDC&limit=10`,
         );
         const currentAddr = group.vault_address.toLowerCase();
-        const better = (data.vaults ?? []).filter(
-          (v: VaultOption) =>
-            v.address.toLowerCase() !== currentAddr &&
-            v.apy !== null &&
-            v.apy > (vaultInfo.apy?.total ?? 0),
+        const currentApy = vaultInfo?.apy?.total ?? 0;
+        const others = (data.vaults ?? []).filter(
+          (v: VaultOption) => v.address.toLowerCase() !== currentAddr,
         );
-        if (!cancelled) setBetterVaults(better);
+        // Show vaults with higher APY first, then the rest
+        const sorted = others.sort((a, b) => (b.apy ?? 0) - (a.apy ?? 0));
+        if (!cancelled) setBetterVaults(sorted);
       } catch { /* silent */ }
     })();
     return () => { cancelled = true; };
-  }, [vaultInfo, group?.vault_address]);
+  }, [group?.vault_address, vaultInfo]);
 
   async function proposeSwitch(newAddr: string) {
     setVaultActionPending(true);
@@ -316,20 +317,26 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
             </div>
           )}
 
-          {/* Vault yield info */}
-          {vaultInfo && vaultInfo.apy && (
-            <div className="betpal-alert betpal-alert--success" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span>Your money earns</span>
-              <strong style={{ fontSize: 15 }}>
-                {fmtApy(vaultInfo.apy.total)} APY
-              </strong>
-              <span>via {vaultInfo.protocol ?? "Morpho"}</span>
-              {vaultInfo.tvl && (
-                <span style={{ opacity: 0.7 }}>
-                  · TVL ${vaultInfo.tvl.usd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                </span>
-              )}
-            </div>
+          {/* Vault yield info — always show section, even if vault info hasn't loaded */}
+          {group?.vault_address ? (
+            vaultInfo && vaultInfo.apy ? (
+              <div className="betpal-alert betpal-alert--success" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span>Yield strategy:</span>
+                <strong style={{ fontSize: 15 }}>
+                  {fmtApy(vaultInfo.apy.total)} APY
+                </strong>
+                <span>via {vaultInfo.protocol ?? "Morpho"}</span>
+                {vaultInfo.tvl && (
+                  <span style={{ opacity: 0.7 }}>
+                    · TVL ${vaultInfo.tvl.usd.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div style={{ opacity: 0.6, fontSize: 12 }}>Loading vault info...</div>
+            )
+          ) : (
+            <div style={{ opacity: 0.6, fontSize: 12 }}>No vault configured yet.</div>
           )}
 
           {/* Server wallet + gas */}
@@ -409,28 +416,37 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
             </div>
           )}
 
-          {/* Higher APY vaults — only show if no pending proposal */}
+          {/* Switch vault — always show available vaults */}
           {!proposal?.pending && betterVaults.length > 0 && !vaultActionPending && (
-            <div className="betpal-alert betpal-alert--info" style={{ fontSize: 12 }}>
-              <strong>Higher APY available:</strong>
-              {betterVaults.slice(0, 2).map((v) => (
-                <div key={v.address} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                  <span>
-                    {v.name ?? "Vault"} ({v.protocol}) — <strong>{fmtApy(v.apy ?? null)}</strong> APY
-                  </span>
-                  <button
-                    style={{ fontSize: 11, padding: "2px 8px" }}
-                    onClick={() => proposeSwitch(v.address)}
-                    disabled={vaultActionPending}
-                  >
-                    Propose switch
-                  </button>
+            <details style={{ fontSize: 12 }}>
+              <summary style={{ cursor: "pointer", fontWeight: 700 }}>Switch vault ({betterVaults.length} available)</summary>
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                {betterVaults.slice(0, 5).map((v) => {
+                  const currentApy = vaultInfo?.apy?.total ?? 0;
+                  const isHigher = v.apy != null && v.apy > currentApy;
+                  return (
+                    <div key={v.address} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 8px", background: "#f5f5f5", border: "1px solid #ddd" }}>
+                      <span>
+                        {v.name ?? "Vault"} ({v.protocol}) — <strong>{fmtApy(v.apy ?? null)}</strong> APY
+                        {v.tvl_usd != null && <span style={{ opacity: 0.6 }}> · TVL ${v.tvl_usd >= 1_000_000 ? `${(v.tvl_usd / 1_000_000).toFixed(1)}M` : `${(v.tvl_usd / 1_000).toFixed(0)}K`}</span>}
+                        {v.risk && <span style={{ marginLeft: 4, fontSize: 10, fontWeight: 600, color: v.risk === "low" ? "#080" : v.risk === "medium" ? "#b80" : "#c00" }}>{v.risk}</span>}
+                        {isHigher && <span style={{ marginLeft: 4, fontSize: 10, color: "#080", fontWeight: 600 }}>higher APY</span>}
+                      </span>
+                      <button
+                        style={{ fontSize: 11, padding: "2px 8px" }}
+                        onClick={() => proposeSwitch(v.address)}
+                        disabled={vaultActionPending}
+                      >
+                        Propose
+                      </button>
+                    </div>
+                  );
+                })}
+                <div style={{ opacity: 0.6, fontSize: 11 }}>
+                  A second member must accept the switch before funds migrate.
                 </div>
-              ))}
-              <div style={{ marginTop: 4, opacity: 0.6, fontSize: 11 }}>
-                A second member must accept the switch before funds migrate.
               </div>
-            </div>
+            </details>
           )}
           {vaultActionPending && !proposal?.pending && (
             <div className="betpal-alert betpal-alert--info">Processing…</div>
