@@ -129,7 +129,7 @@ async function checkBalancesOnChain(
         });
       }
     }
-  } catch { /* skip native if RPC fails */ }
+  } catch (e) { console.warn(`[holdings] native balance failed on ${chainDef.name}:`, (e as Error).message); }
 
   // ERC-20 balances via multicall
   const erc20s = tokens
@@ -173,7 +173,7 @@ async function checkBalancesOnChain(
         valueUSD,
       });
     }
-  } catch { /* skip chain if multicall fails */ }
+  } catch (e) { console.warn(`[holdings] multicall failed on ${chainDef.name}:`, (e as Error).message); }
 
   return holdings;
 }
@@ -193,8 +193,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    console.log(`[holdings] fetching for wallet ${wallet}`);
     // 1) Fetch token lists for all chains from LI.FI (single request)
     const allTokens = await getLifiTokens(CHAINS.map((c) => c.id));
+    console.log(`[holdings] LI.FI tokens loaded: ${Object.entries(allTokens).map(([k, v]) => `${k}=${(v as any[]).length}`).join(", ")}`);
 
     // 2) Check balances across all chains in parallel
     const chainResults = await Promise.all(
@@ -210,6 +212,7 @@ export async function GET(req: NextRequest) {
 
     const allHoldings = chainResults.flat();
     allHoldings.sort((a, b) => b.valueUSD - a.valueUSD);
+    console.log(`[holdings] found ${allHoldings.length} tokens: ${allHoldings.map(h => `${h.symbol}@${h.chainName}`).join(", ")}`);
 
     return NextResponse.json({ holdings: allHoldings });
   } catch (err) {

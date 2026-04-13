@@ -43,7 +43,8 @@ export function useWalletHoldings() {
           `/api/wallet/holdings?address=${wallet.address}`,
         );
         if (!cancelled) setHoldings(json.holdings);
-      } catch {
+      } catch (err) {
+        console.error("[useWalletHoldings] failed:", (err as Error).message);
         if (!cancelled) setHoldings([]);
       } finally {
         if (!cancelled) setLoading(false);
