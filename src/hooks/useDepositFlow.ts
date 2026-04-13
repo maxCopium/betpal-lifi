@@ -204,7 +204,7 @@ export function useDepositFlow(): DepositFlowState {
           if (res.stake_status === "created") {
             setStatus("Deposit confirmed & bet placed!");
           } else if (res.stake_status?.startsWith("skipped_")) {
-            setStatus("Deposit confirmed. Bet could not be placed — funds added to your balance.");
+            setStatus(`Deposit confirmed. Bet could not be placed (${res.stake_status}) — funds added to your balance.`);
           } else {
             setStatus("Funds delivered to group vault.");
           }

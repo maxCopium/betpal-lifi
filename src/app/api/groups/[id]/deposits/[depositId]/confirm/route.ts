@@ -109,14 +109,14 @@ export async function POST(
             .single();
 
           if (!bet || bet.status !== "open") {
-            stakeStatus = "skipped_closed";
+            stakeStatus = `skipped_closed:bet_status=${bet?.status ?? "missing"}`;
           } else if (new Date(bet.join_deadline) <= new Date()) {
-            stakeStatus = "skipped_deadline";
+            stakeStatus = `skipped_deadline:deadline=${bet.join_deadline}`;
           } else {
             // Insert stake using the bet's fixed stake amount, not the deposit amount.
             const stakeAmountCents = Number(bet.stake_amount_cents);
             if (amountCents < stakeAmountCents) {
-              stakeStatus = "skipped_insufficient";
+              stakeStatus = `skipped_insufficient:deposited=${amountCents},needed=${stakeAmountCents}`;
             } else {
               const { data: stakeRow, error: stakeErr } = await sb.from("stakes").insert({
                 bet_id: tx.intended_bet_id,
@@ -127,7 +127,7 @@ export async function POST(
               if (stakeErr?.code === "23505") {
                 stakeStatus = "skipped_duplicate";
               } else if (stakeErr) {
-                stakeStatus = "skipped_error";
+                stakeStatus = `skipped_error:${stakeErr.message}`;
               } else {
                 // Re-check bet status after insert to close TOCTOU window.
                 const { data: freshBet } = await sb
