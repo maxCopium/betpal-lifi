@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
-import { getVaultDetail, vaultApy } from "@/lib/earn";
+import { findVaultByAddress, vaultApy } from "@/lib/earn";
 import { USDC_BASE } from "@/lib/constants";
 
 /**
@@ -68,15 +68,13 @@ export async function POST(
       throw new HttpError(400, "new vault is the same as the current vault");
     }
 
-    // Validate new vault on LI.FI Earn
-    let detail;
-    try {
-      detail = await getVaultDetail({
-        chainId: Number(group.vault_chain_id),
-        address: newVault,
-      });
-    } catch (err) {
-      throw new HttpError(502, `failed to validate vault via LI.FI: ${(err as Error).message}`);
+    // Validate new vault on LI.FI Earn (use list endpoint — detail 404s for many vaults)
+    const detail = await findVaultByAddress({
+      chainId: Number(group.vault_chain_id),
+      address: newVault,
+    });
+    if (!detail) {
+      throw new HttpError(400, "vault not found on LI.FI Earn for this chain");
     }
     const underlying = detail.underlyingTokens?.[0]?.address?.toLowerCase();
     if (underlying !== USDC_BASE.toLowerCase()) {
@@ -132,16 +130,18 @@ export async function GET(
       return Response.json({ pending: false });
     }
 
-    // Enrich with vault details
+    // Enrich with vault details (use list endpoint — detail 404s for many vaults)
     let newVaultName: string | null = null;
     let newVaultApy: number | undefined;
     try {
-      const detail = await getVaultDetail({
+      const found = await findVaultByAddress({
         chainId: Number(group.vault_chain_id),
         address: group.pending_vault_address as string,
       });
-      newVaultName = detail.name ?? null;
-      newVaultApy = vaultApy(detail);
+      if (found) {
+        newVaultName = found.name ?? null;
+        newVaultApy = vaultApy(found);
+      }
     } catch { /* silent — vault info is optional */ }
 
     // Get proposer display name

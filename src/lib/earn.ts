@@ -143,6 +143,20 @@ export async function getVaultDetail(opts: {
 }
 
 /**
+ * Look up a single vault by address using the list endpoint.
+ * The `/v1/earn/vault` detail endpoint returns 404 for many vaults,
+ * so we use `/v1/earn/vaults` and filter client-side instead.
+ */
+export async function findVaultByAddress(opts: {
+  chainId: number;
+  address: string;
+}): Promise<EarnVault | null> {
+  const vaults = await listVaults({ chainId: opts.chainId });
+  const addr = opts.address.toLowerCase();
+  return vaults.find((v) => v.address.toLowerCase() === addr) ?? null;
+}
+
+/**
  * Find the highest-APY USDC vault on Base via LI.FI Earn.
  * Used at group creation to auto-select the best vault.
  * Falls back to a known-good vault if the API is down.

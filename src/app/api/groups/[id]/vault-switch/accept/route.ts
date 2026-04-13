@@ -3,7 +3,7 @@ import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
 import { sendGroupContractCall } from "@/lib/groupWallet";
 import { basePublicClient } from "@/lib/viem";
-import { getVaultDetail, vaultApy } from "@/lib/earn";
+import { findVaultByAddress, vaultApy } from "@/lib/earn";
 import { USDC_BASE } from "@/lib/constants";
 import { ERC4626_ABI, ERC20_ABI } from "@/lib/abis";
 
@@ -147,12 +147,14 @@ export async function POST(
     let newVaultApy: number | undefined;
     let newVaultName: string | undefined;
     try {
-      const detail = await getVaultDetail({
+      const found = await findVaultByAddress({
         chainId: Number(group.vault_chain_id),
         address: newVault,
       });
-      newVaultApy = vaultApy(detail);
-      newVaultName = detail.name;
+      if (found) {
+        newVaultApy = vaultApy(found);
+        newVaultName = found.name;
+      }
     } catch { /* silent */ }
 
     return Response.json({

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { errorResponse, requireUser } from "@/lib/auth";
 import {
-  getVaultDetail,
+  findVaultByAddress,
   vaultApy,
   vaultTvlUsd,
   vaultProtocolName,
@@ -27,10 +27,16 @@ export async function GET(req: NextRequest) {
         { status: 400 },
       );
     }
-    const vault = await getVaultDetail({
+    const vault = await findVaultByAddress({
       chainId: Number(chainId),
       address,
     });
+    if (!vault) {
+      return NextResponse.json(
+        { error: "vault not found on LI.FI Earn for this chain" },
+        { status: 404 },
+      );
+    }
 
     const apy = vaultApy(vault);
     const tvl = vaultTvlUsd(vault);
