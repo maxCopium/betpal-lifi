@@ -34,7 +34,7 @@ const CreateBody = z.object({
   /** ISO timestamp; must be in the future and before the market end. */
   join_deadline: z.string().datetime().optional(),
   /** Fixed stake amount in cents that every participant must pay. */
-  stake_amount_cents: z.number().int().min(100).max(1_000_000), // $1 – $10,000
+  stake_amount_cents: z.number().int().min(1).max(1_000_000), // $0.01 – $10,000
   /** Optional cap on how many people can join. */
   max_participants: z.number().int().min(2).max(100).optional(),
   /** If true and max_participants is set, bet locks when all slots fill. */

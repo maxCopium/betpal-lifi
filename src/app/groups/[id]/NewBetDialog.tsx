@@ -116,8 +116,8 @@ export function NewBetDialog({
     setSubmitting(true);
     try {
       const cents = Math.round(parseFloat(stakeAmountUsd) * 100);
-      if (!Number.isFinite(cents) || cents < 100) {
-        setError("Stake must be at least $1.00");
+      if (!Number.isFinite(cents) || cents < 1) {
+        setError("Stake must be at least $0.01");
         return;
       }
       const maxP = maxParticipants ? parseInt(maxParticipants, 10) : undefined;
