@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { errorResponse, requireUser } from "@/lib/auth";
 import { env } from "@/lib/env";
-import { formatUnits, getAddress, isAddress } from "viem";
+import {
+  createPublicClient,
+  erc20Abi,
+  formatUnits,
+  getAddress,
+  http,
+  isAddress,
+} from "viem";
+import { base, mainnet, polygon, arbitrum, optimism } from "viem/chains";
 
 /**
  * GET /api/wallet/holdings?address=0x...
  *
- * Fetches the user's non-zero token balances across popular chains via
- * LI.FI's /v1/token/balances (multi-token per chain).
+ * Fetches the user's non-zero token balances across multiple chains.
+ * Uses LI.FI /v1/tokens for the token list, then viem multicall per chain
+ * for actual balances (LI.FI has no working balance REST endpoint).
  *
  * Returns holdings sorted by USD value — used for "Pay from" selector.
  */
@@ -17,26 +26,20 @@ export const maxDuration = 30;
 const LIFI_BASE = "https://li.quest/v1";
 
 const CHAINS = [
-  { id: 8453, name: "Base" },
-  { id: 1, name: "Ethereum" },
-  { id: 137, name: "Polygon" },
-  { id: 42161, name: "Arbitrum" },
-  { id: 10, name: "Optimism" },
-];
+  { id: 8453, name: "Base", chain: base },
+  { id: 1, name: "Ethereum", chain: mainnet },
+  { id: 137, name: "Polygon", chain: polygon },
+  { id: 42161, name: "Arbitrum", chain: arbitrum },
+  { id: 10, name: "Optimism", chain: optimism },
+] as const;
 
 type TokenInfo = {
   address: string;
   symbol: string;
   decimals: number;
   name: string;
-  chainId: number;
   logoURI?: string;
   priceUSD?: string;
-};
-
-type TokenBalance = TokenInfo & {
-  amount: string;
-  blockNumber: number;
 };
 
 export type Holding = {
@@ -53,11 +56,13 @@ export type Holding = {
   valueUSD: number;
 };
 
-/** Fetch top tokens for a chain from LI.FI */
-async function getTokensForChain(chainId: number): Promise<TokenInfo[]> {
+/** Fetch top tokens for multiple chains from LI.FI in one request */
+async function getLifiTokens(
+  chainIds: readonly number[],
+): Promise<Record<number, TokenInfo[]>> {
   try {
     const res = await fetch(
-      `${LIFI_BASE}/tokens?chains=${chainId}&minPriceUSD=0.01`,
+      `${LIFI_BASE}/tokens?chains=${chainIds.join(",")}&minPriceUSD=0.10`,
       {
         headers: {
           accept: "application/json",
@@ -66,39 +71,111 @@ async function getTokensForChain(chainId: number): Promise<TokenInfo[]> {
         next: { revalidate: 300 },
       },
     );
-    if (!res.ok) return [];
-    const json = (await res.json()) as { tokens: Record<string, TokenInfo[]> };
-    return json.tokens?.[String(chainId)] ?? [];
+    if (!res.ok) return {};
+    const json = (await res.json()) as {
+      tokens: Record<string, TokenInfo[]>;
+    };
+    const result: Record<number, TokenInfo[]> = {};
+    for (const cid of chainIds) {
+      result[cid] = json.tokens?.[String(cid)] ?? [];
+    }
+    return result;
   } catch {
-    return [];
+    return {};
   }
 }
 
-/** Fetch token balances for a wallet on a chain via LI.FI */
-async function getBalancesForChain(
-  walletAddress: string,
-  chainId: number,
-  tokenAddresses: string[],
-): Promise<TokenBalance[]> {
+/** Check balances for a wallet on one chain via viem multicall */
+async function checkBalancesOnChain(
+  chainDef: (typeof CHAINS)[number],
+  wallet: `0x${string}`,
+  tokens: TokenInfo[],
+): Promise<Holding[]> {
+  const rpcUrl =
+    chainDef.id === 8453
+      ? env.baseRpcUrl()
+      : undefined; // use default public RPC for other chains
+
+  const client = createPublicClient({
+    chain: chainDef.chain,
+    transport: http(rpcUrl),
+  });
+
+  const holdings: Holding[] = [];
+
+  // Native balance
   try {
-    const res = await fetch(`${LIFI_BASE}/token/balances`, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        "x-lifi-api-key": env.lifiApiKey(),
-      },
-      body: JSON.stringify({
-        walletAddress,
-        chainId,
-        tokenAddresses,
-      }),
-    });
-    if (!res.ok) return [];
-    return (await res.json()) as TokenBalance[];
-  } catch {
-    return [];
-  }
+    const nativeBal = await client.getBalance({ address: wallet });
+    if (nativeBal > BigInt(0)) {
+      const nativeToken = tokens.find(
+        (t) => t.address === "0x0000000000000000000000000000000000000000",
+      );
+      const formatted = formatUnits(nativeBal, 18);
+      const price = Number(nativeToken?.priceUSD ?? 0);
+      const valueUSD = price * Number(formatted);
+      if (valueUSD >= 0.01) {
+        holdings.push({
+          chainId: chainDef.id,
+          chainName: chainDef.name,
+          token: "0x0000000000000000000000000000000000000000",
+          symbol: nativeToken?.symbol ?? "ETH",
+          name: nativeToken?.name ?? "Native",
+          decimals: 18,
+          balance: nativeBal.toString(),
+          balanceFormatted: formatted,
+          logoURI: nativeToken?.logoURI,
+          priceUSD: nativeToken?.priceUSD,
+          valueUSD,
+        });
+      }
+    }
+  } catch { /* skip native if RPC fails */ }
+
+  // ERC-20 balances via multicall
+  const erc20s = tokens
+    .filter((t) => t.address !== "0x0000000000000000000000000000000000000000")
+    .slice(0, 20); // cap to keep fast
+
+  if (erc20s.length === 0) return holdings;
+
+  try {
+    const calls = erc20s.map((t) => ({
+      address: getAddress(t.address) as `0x${string}`,
+      abi: erc20Abi,
+      functionName: "balanceOf" as const,
+      args: [wallet] as const,
+    }));
+
+    const results = await client.multicall({ contracts: calls });
+
+    for (let i = 0; i < erc20s.length; i++) {
+      const result = results[i];
+      if (result.status !== "success") continue;
+      const raw = result.result as bigint;
+      if (raw <= BigInt(0)) continue;
+
+      const t = erc20s[i];
+      const formatted = formatUnits(raw, t.decimals);
+      const valueUSD = Number(t.priceUSD ?? 0) * Number(formatted);
+      if (valueUSD < 0.01) continue;
+
+      holdings.push({
+        chainId: chainDef.id,
+        chainName: chainDef.name,
+        token: t.address,
+        symbol: t.symbol,
+        name: t.name,
+        decimals: t.decimals,
+        balance: raw.toString(),
+        balanceFormatted: formatted,
+        logoURI: t.logoURI,
+        priceUSD: t.priceUSD,
+        valueUSD,
+      });
+    }
+  } catch { /* skip chain if multicall fails */ }
+
+  return holdings;
 }
 
 export async function GET(req: NextRequest) {
@@ -108,7 +185,7 @@ export async function GET(req: NextRequest) {
     if (!address || !isAddress(address)) {
       return NextResponse.json({ error: "invalid address" }, { status: 400 });
     }
-    const wallet = getAddress(address);
+    const wallet = getAddress(address) as `0x${string}`;
     if (wallet.toLowerCase() !== me.walletAddress.toLowerCase()) {
       return NextResponse.json(
         { error: "can only query your own wallet" },
@@ -116,66 +193,22 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Fetch tokens for all chains in parallel
-    const chainTokens = await Promise.all(
-      CHAINS.map(async (chain) => {
-        const tokens = await getTokensForChain(chain.id);
-        // Take top 15 by price to keep it fast
-        const sorted = [...tokens]
-          .sort((a, b) => Number(b.priceUSD ?? 0) - Number(a.priceUSD ?? 0))
-          .slice(0, 15);
-        return { chain, tokens: sorted };
-      }),
-    );
+    // 1) Fetch token lists for all chains from LI.FI (single request)
+    const allTokens = await getLifiTokens(CHAINS.map((c) => c.id));
 
-    // Fetch balances for all chains in parallel
-    const allHoldings: Holding[] = [];
-    const balanceResults = await Promise.all(
-      chainTokens.map(({ chain, tokens }) => {
-        if (tokens.length === 0) return Promise.resolve([]);
-        return getBalancesForChain(
-          wallet,
-          chain.id,
-          tokens.map((t) => t.address),
+    // 2) Check balances across all chains in parallel
+    const chainResults = await Promise.all(
+      CHAINS.map((chainDef) => {
+        const tokens = allTokens[chainDef.id] ?? [];
+        // Sort by price desc, take top tokens
+        const sorted = [...tokens].sort(
+          (a, b) => Number(b.priceUSD ?? 0) - Number(a.priceUSD ?? 0),
         );
+        return checkBalancesOnChain(chainDef, wallet, sorted);
       }),
     );
 
-    for (let i = 0; i < CHAINS.length; i++) {
-      const chain = CHAINS[i];
-      const balances = balanceResults[i];
-      const tokenMap = new Map(
-        chainTokens[i].tokens.map((t) => [t.address.toLowerCase(), t]),
-      );
-
-      for (const bal of balances) {
-        const raw = BigInt(bal.amount ?? "0");
-        if (raw <= BigInt(0)) continue;
-
-        const token = tokenMap.get(bal.address.toLowerCase()) ?? bal;
-        const formatted = formatUnits(raw, token.decimals);
-        const valueUSD = Number(token.priceUSD ?? 0) * Number(formatted);
-
-        // Skip dust (< $0.01)
-        if (valueUSD < 0.01) continue;
-
-        allHoldings.push({
-          chainId: chain.id,
-          chainName: chain.name,
-          token: token.address,
-          symbol: token.symbol,
-          name: token.name,
-          decimals: token.decimals,
-          balance: raw.toString(),
-          balanceFormatted: formatted,
-          logoURI: token.logoURI,
-          priceUSD: token.priceUSD,
-          valueUSD,
-        });
-      }
-    }
-
-    // Sort by USD value descending
+    const allHoldings = chainResults.flat();
     allHoldings.sort((a, b) => b.valueUSD - a.valueUSD);
 
     return NextResponse.json({ holdings: allHoldings });
