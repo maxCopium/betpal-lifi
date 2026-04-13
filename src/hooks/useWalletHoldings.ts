@@ -1,37 +1,26 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useWallets } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
+import type { TokenBalance } from "@/hooks/useWalletBalances";
 
-export type Holding = {
+export type Holding = TokenBalance & {
   chainId: number;
   chainName: string;
-  token: string;
-  symbol: string;
-  name: string;
-  decimals: number;
-  balance: string;
-  balanceFormatted: string;
-  logoURI?: string;
-  priceUSD?: string;
   valueUSD: number;
 };
 
 /**
- * Fetches the user's token holdings across multiple chains via /api/wallet/holdings.
- * Used for "Pay from" selector — shows only tokens the user actually owns.
+ * Fetches the user's token holdings for the "Pay from" selector.
+ * Reuses the existing /api/wallet/balance endpoint (Base, fast multicall)
+ * and enriches with chain info for the deposit flow.
  */
-export function useWalletHoldings() {
-  const { wallets } = useWallets();
+export function useWalletHoldings(walletAddress: string | undefined) {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const wallet =
-    wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
-
   useEffect(() => {
-    if (!wallet?.address) {
+    if (!walletAddress) {
       setHoldings([]);
       setLoading(false);
       return;
@@ -39,10 +28,17 @@ export function useWalletHoldings() {
     let cancelled = false;
     (async () => {
       try {
-        const json = await authedFetch<{ holdings: Holding[] }>(
-          `/api/wallet/holdings?address=${wallet.address}`,
+        const json = await authedFetch<{ balances: TokenBalance[] }>(
+          `/api/wallet/balance?address=${walletAddress}`,
         );
-        if (!cancelled) setHoldings(json.holdings);
+        if (cancelled) return;
+        const enriched: Holding[] = json.balances.map((b) => ({
+          ...b,
+          chainId: 8453,
+          chainName: "Base",
+          valueUSD: Number(b.priceUSD ?? 0) * Number(b.balanceFormatted),
+        }));
+        setHoldings(enriched);
       } catch (err) {
         console.error("[useWalletHoldings] failed:", (err as Error).message);
         if (!cancelled) setHoldings([]);
@@ -51,7 +47,7 @@ export function useWalletHoldings() {
       }
     })();
     return () => { cancelled = true; };
-  }, [wallet?.address]);
+  }, [walletAddress]);
 
   return { holdings, loading };
 }

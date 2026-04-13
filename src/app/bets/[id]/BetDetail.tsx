@@ -82,7 +82,8 @@ export function BetDetail({ betId }: { betId: string }) {
   const [forceOutcome, setForceOutcome] = useState("");
   const [forceSubmitting, setForceSubmitting] = useState(false);
   const flow = useDepositFlow();
-  const { holdings, loading: holdingsLoading } = useWalletHoldings();
+  const privyWallet = wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
+  const { holdings, loading: holdingsLoading } = useWalletHoldings(privyWallet?.address);
   const marketPrices = useMarketPrices(betId, data?.bet.status);
 
   const reload = useCallback(async () => {
@@ -190,7 +191,7 @@ export function BetDetail({ betId }: { betId: string }) {
         source: {
           label: `${src.symbol} · ${src.chainName}`,
           chainId: src.chainId,
-          token: src.token as `0x${string}`,
+          token: src.address as `0x${string}`,
           decimals: src.decimals,
         },
         amount: stakeUsd,
@@ -630,7 +631,7 @@ export function BetDetail({ betId }: { betId: string }) {
               ) : (
                 <select id="join-source" value={sourceIdx} onChange={(e) => setSourceIdx(Number(e.target.value))}>
                   {holdings.map((h, i) => (
-                    <option key={`${h.chainId}-${h.token}`} value={i}>
+                    <option key={`${h.chainId}-${h.address}`} value={i}>
                       {h.symbol} · {h.chainName} — {Number(h.balanceFormatted).toFixed(2)} (${h.valueUSD.toFixed(2)})
                     </option>
                   ))}
