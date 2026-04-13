@@ -1,5 +1,5 @@
 import "server-only";
-import { errorResponse, requireUser } from "@/lib/auth";
+import { HttpError, errorResponse, requireUser } from "@/lib/auth";
 import { listVaults, vaultApy, vaultTvlUsd, vaultAssetSymbol, vaultProtocolName } from "@/lib/earn";
 import { BASE_CHAIN_ID } from "@/lib/constants";
 
@@ -17,8 +17,12 @@ export async function GET(request: Request): Promise<Response> {
     const asset = url.searchParams.get("asset") ?? "USDC";
     const limit = Math.min(20, Math.max(1, Number(url.searchParams.get("limit") ?? "10")));
 
-    // Fetch more than needed so we can re-sort by TVL and still have `limit` results.
-    const vaults = await listVaults({ chainId, asset, sortBy: "tvl", limit: Math.max(limit, 20) });
+    let vaults;
+    try {
+      vaults = await listVaults({ chainId, asset, sortBy: "tvl", limit: Math.max(limit, 20) });
+    } catch (fetchErr) {
+      throw new HttpError(502, `LI.FI Earn API failed: ${(fetchErr as Error).message}`);
+    }
 
     const projected = vaults
       .map((v) => {
@@ -31,17 +35,14 @@ export async function GET(request: Request): Promise<Response> {
           asset: vaultAssetSymbol(v) ?? asset,
           apy: vaultApy(v) ?? null,
           tvl_usd: tvl || null,
-          // Risk tier based on TVL: higher TVL = more battle-tested.
           risk: tvl >= 10_000_000 ? "low" : tvl >= 1_000_000 ? "medium" : "high",
         };
       })
-      // Sort by TVL descending so safest vaults appear first.
       .sort((a, b) => (b.tvl_usd ?? 0) - (a.tvl_usd ?? 0))
       .slice(0, limit);
 
     return Response.json({ vaults: projected });
   } catch (e) {
-    console.error("[earn/vaults] error:", (e as Error).message, (e as Error).stack?.slice(0, 500));
     return errorResponse(e);
   }
 }
