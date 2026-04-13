@@ -26,25 +26,51 @@ export async function POST(
     const { id: betId } = await params;
     const sb = supabaseService();
 
-    // Verify user has a stake on this bet.
-    const { data: stake, error: stakeErr } = await sb
-      .from("stakes")
-      .select("id")
-      .eq("bet_id", betId)
-      .eq("user_id", me.id)
-      .maybeSingle();
-    if (stakeErr) throw new HttpError(500, `stake check failed: ${stakeErr.message}`);
-    if (!stake) throw new HttpError(403, "you have no stake on this bet");
-
     // Verify bet is in a cancellable state.
     const { data: bet, error: betErr } = await sb
       .from("bets")
-      .select("id, group_id, status")
+      .select("id, group_id, creator_id, status")
       .eq("id", betId)
       .single();
     if (betErr || !bet) throw new HttpError(500, `bet lookup failed: ${betErr?.message}`);
     if (bet.status === "settled" || bet.status === "voided") {
       throw new HttpError(409, `bet already ${bet.status}`);
+    }
+
+    // Check stakes
+    const { data: allStakers } = await sb
+      .from("stakes")
+      .select("user_id")
+      .eq("bet_id", betId);
+    const stakerIds = new Set((allStakers ?? []).map((s) => s.user_id));
+
+    // If no stakers, the creator can void directly.
+    if (stakerIds.size === 0) {
+      if (bet.creator_id !== me.id) {
+        throw new HttpError(403, "only the creator can cancel a bet with no stakers");
+      }
+      await sb
+        .from("bets")
+        .update({
+          status: "voided",
+          resolution_outcome: null,
+          settled_at: new Date().toISOString(),
+        })
+        .eq("id", betId)
+        .in("status", ["open", "locked", "resolving"]);
+
+      return Response.json({
+        voted: true,
+        unanimous: true,
+        voided: true,
+        votes: 0,
+        total: 0,
+      });
+    }
+
+    // Verify user has a stake on this bet.
+    if (!stakerIds.has(me.id)) {
+      throw new HttpError(403, "you have no stake on this bet");
     }
 
     // Insert cancel vote (idempotent — primary key conflict is fine).
@@ -57,16 +83,11 @@ export async function POST(
     }
 
     // Check if all stakers have voted.
-    const { data: allStakers } = await sb
-      .from("stakes")
-      .select("user_id")
-      .eq("bet_id", betId);
     const { data: allVotes } = await sb
       .from("cancel_votes")
       .select("user_id")
       .eq("bet_id", betId);
 
-    const stakerIds = new Set((allStakers ?? []).map((s) => s.user_id));
     const voteIds = new Set((allVotes ?? []).map((v) => v.user_id));
     const allVoted = [...stakerIds].every((id) => voteIds.has(id as string));
 

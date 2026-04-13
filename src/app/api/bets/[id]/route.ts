@@ -109,7 +109,7 @@ export async function GET(
       vaultAddress = (grp?.vault_address as string) ?? null;
     } catch { /* non-critical */ }
 
-    return Response.json({ bet, stakes, my_stake: myStake, free_balance_cents: freeBalanceCents, vault_address: vaultAddress });
+    return Response.json({ bet, stakes, my_stake: myStake, free_balance_cents: freeBalanceCents, vault_address: vaultAddress, my_user_id: me.id });
   } catch (e) {
     return errorResponse(e);
   }

@@ -48,6 +48,7 @@ type DetailResponse = {
   my_stake: Stake | null;
   free_balance_cents: number;
   vault_address: string | null;
+  my_user_id: string;
 };
 
 
@@ -505,13 +506,13 @@ export function BetDetail({ betId }: { betId: string }) {
         );
       })()}
 
-      {/* Cancel vote */}
-      {my_stake && bet.status !== "settled" && bet.status !== "voided" && (
+      {/* Cancel / void bet */}
+      {bet.status !== "settled" && bet.status !== "voided" && (my_stake || (stakes.length === 0 && bet.creator_id === data.my_user_id)) && (
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button onClick={voteCancelBet} disabled={cancelling}>
-            {cancelling ? "Voting..." : "Vote to cancel bet"}
+            {cancelling ? "Cancelling..." : stakes.length === 0 ? "Cancel bet" : "Vote to cancel bet"}
           </button>
-          {cancelVotes && (
+          {cancelVotes && cancelVotes.total > 0 && (
             <span>
               <strong>{cancelVotes.votes}/{cancelVotes.total}</strong> agreed to cancel
             </span>
