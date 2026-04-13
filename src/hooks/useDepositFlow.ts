@@ -87,8 +87,12 @@ export function useDepositFlow(): DepositFlowState {
 
     let fromAmount: string;
     try {
-      fromAmount = toBaseUnits(amount, source.decimals);
-      if (fromAmount === "0") throw new Error("amount must be > 0");
+      const raw = toBaseUnits(amount, source.decimals);
+      if (raw === "0") throw new Error("amount must be > 0");
+      // Add 3% buffer to cover LI.FI fees + rounding so enough arrives
+      // for the bet stake. Excess is credited to the user's balance.
+      const buffered = (BigInt(raw) * BigInt(103)) / BigInt(100);
+      fromAmount = buffered.toString();
     } catch (err) {
       setError((err as Error).message);
       return;
