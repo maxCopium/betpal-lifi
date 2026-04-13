@@ -8,7 +8,7 @@
  * the taskbar. Wallet is shown in the sidebar (SidebarWallet).
  */
 import { useCallback, useEffect, useState } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { authedFetch } from "@/lib/clientFetch";
 import { DraggableWindow } from "@/components/win98/DraggableWindow";
 import { WithdrawForm } from "./WithdrawForm";
@@ -99,6 +99,9 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [myRole, setMyRole] = useState<string | null>(null);
   const [gas, setGas] = useState<GasResponse | null>(null);
+  const [sendingGas, setSendingGas] = useState(false);
+  const [gasMsg, setGasMsg] = useState<string | null>(null);
+  const { wallets } = useWallets();
   const [betterVaults, setBetterVaults] = useState<VaultOption[]>([]);
   const [proposal, setProposal] = useState<VaultProposal | null>(null);
   const [vaultActionPending, setVaultActionPending] = useState(false);
@@ -269,6 +272,37 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
     }
   }
 
+  // Send ~$0.50 worth of ETH from user's wallet to group wallet for gas.
+  async function sendGas() {
+    if (!gas?.wallet_address) return;
+    setSendingGas(true);
+    setGasMsg(null);
+    try {
+      const w = wallets.find((wl) => wl.walletClientType === "privy") ?? wallets[0];
+      if (!w) throw new Error("No wallet found — sign in first");
+      try { await w.switchChain(BASE_CHAIN_ID); } catch { /* continue */ }
+      const provider = await w.getEthereumProvider();
+      // Send 0.0002 ETH (~$0.50 at ~$2500/ETH, covers ~100+ Base txs)
+      const value = "0x" + (BigInt("200000000000000")).toString(16); // 0.0002 ETH
+      const txHash = await provider.request({
+        method: "eth_sendTransaction",
+        params: [{ from: w.address, to: gas.wallet_address, value }],
+      });
+      setGasMsg(`Gas sent! Tx: ${String(txHash).slice(0, 14)}…`);
+      // Refresh gas balance after a few seconds
+      setTimeout(async () => {
+        try {
+          const g = await authedFetch<GasResponse>(`/api/groups/${groupId}/gas`);
+          setGas(g);
+        } catch { /* ignore */ }
+      }, 5000);
+    } catch (e) {
+      setGasMsg(`Failed: ${(e as Error).message}`);
+    } finally {
+      setSendingGas(false);
+    }
+  }
+
   if (!ready) return <p>Loading…</p>;
   if (!authenticated) {
     return (
@@ -343,7 +377,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
           {gas && gas.needs_funding && (
             <div className="betpal-alert betpal-alert--error" style={{ fontSize: 12 }}>
               <strong>Gas needed for payouts!</strong> The group wallet has {gas.balance_eth.toFixed(6)} ETH
-              ({gas.txs_affordable} txs remaining). Any member can send a small amount of Base ETH (~$0.50 covers ~100 txs):
+              ({gas.txs_affordable} txs remaining). Send ~$0.50 of Base ETH to cover ~100 txs:
               <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
                 <code className="break-all" style={{ fontSize: 11, flex: 1 }}>
                   {gas.wallet_address}
@@ -355,7 +389,16 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
                 >
                   Copy
                 </button>
+                <button
+                  type="button"
+                  style={{ fontSize: 10, padding: "1px 6px", whiteSpace: "nowrap", background: "#000080", color: "#fff" }}
+                  disabled={sendingGas}
+                  onClick={sendGas}
+                >
+                  {sendingGas ? "Sending…" : "Send gas"}
+                </button>
               </div>
+              {gasMsg && <div style={{ marginTop: 4, fontSize: 11 }}>{gasMsg}</div>}
             </div>
           )}
           {gas && !gas.needs_funding && (
@@ -378,7 +421,16 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
                     >
                       Copy
                     </button>
+                    <button
+                      type="button"
+                      style={{ fontSize: 10, padding: "1px 6px", whiteSpace: "nowrap", background: "#000080", color: "#fff" }}
+                      disabled={sendingGas}
+                      onClick={sendGas}
+                    >
+                      {sendingGas ? "Sending…" : "Send gas"}
+                    </button>
                   </div>
+                  {gasMsg && <div style={{ marginTop: 4, fontSize: 11 }}>{gasMsg}</div>}
                 </div>
               </details>
             </div>
@@ -516,15 +568,6 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
         </div>
       </DraggableWindow>
 
-      {/* ── Withdraw Window ── */}
-      <DraggableWindow id="withdraw" title="Withdraw">
-        <WithdrawForm
-          groupId={groupId}
-          freeBalanceCents={balance?.user_free_cents ?? 0}
-          onWithdrawn={loadBalance}
-        />
-      </DraggableWindow>
-
       {/* ── Bets Window ── */}
       <DraggableWindow id="bets" title="Bets">
         <div className="flex flex-col gap-2">
@@ -539,6 +582,15 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
           </div>
           <BetList groupId={groupId} refreshKey={betsRefreshKey} />
         </div>
+      </DraggableWindow>
+
+      {/* ── Withdraw Window ── */}
+      <DraggableWindow id="withdraw" title="Withdraw">
+        <WithdrawForm
+          groupId={groupId}
+          freeBalanceCents={balance?.user_free_cents ?? 0}
+          onWithdrawn={loadBalance}
+        />
       </DraggableWindow>
 
       <NewBetDialog
