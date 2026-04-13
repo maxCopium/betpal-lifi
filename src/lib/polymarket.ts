@@ -133,17 +133,14 @@ export async function searchMarkets(query: string, limit = 20): Promise<Polymark
 
   const sb = supabaseService();
 
-  // Build an ilike filter: every term must appear in search_text.
-  let q = sb
+  // Use Postgres full-text search — leverages the GIN index on search_text.
+  // Join terms with & (AND) so all must match.
+  const tsQuery = terms.join(" & ");
+  const { data, error } = await sb
     .from("polymarket_cache")
     .select("market_id, question, slug, end_date, closed, active")
+    .textSearch("search_text", tsQuery, { type: "plain", config: "english" })
     .limit(limit);
-
-  for (const term of terms) {
-    q = q.ilike("search_text", `%${term}%`);
-  }
-
-  const { data, error } = await q;
   if (error) throw new Error(`polymarket search failed: ${error.message}`);
   if (!data || data.length === 0) return [];
 
