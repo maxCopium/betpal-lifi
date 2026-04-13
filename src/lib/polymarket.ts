@@ -39,13 +39,20 @@ const MarketSchema = z
 export type PolymarketMarket = z.infer<typeof MarketSchema>;
 
 /**
- * In-memory event cache. Gamma has 3500+ open events; we fetch them all once
- * and reuse for every search until the TTL expires. This avoids 8 parallel
- * requests per keystroke and keeps us well under any rate limit.
+ * Event cache with pre-computed search index. Uses Next.js data cache
+ * (revalidate) so Vercel persists responses across cold starts. In-memory
+ * layer avoids re-parsing on warm instances.
  */
-const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours — events last months; new ones trickle in
-let cachedEvents: Record<string, unknown>[] = [];
-let cacheTimestamp = 0;
+type SearchEntry = {
+  event: Record<string, unknown>;
+  market: Record<string, unknown>;
+  primary: string;   // title + question (boosted)
+  blob: string;      // full JSON (broad match)
+};
+
+let searchIndex: SearchEntry[] = [];
+let indexTimestamp = 0;
+const INDEX_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 async function fetchOpenEvents(pageLimit: number, offset: number): Promise<unknown[]> {
   const url = new URL(`${GAMMA}/events`);
@@ -54,34 +61,54 @@ async function fetchOpenEvents(pageLimit: number, offset: number): Promise<unkno
   url.searchParams.set("closed", "false");
   const res = await fetch(url.toString(), {
     headers: { accept: "application/json" },
-    cache: "no-store",
+    next: { revalidate: 14400 }, // 4h — Vercel data cache persists across cold starts
   });
   if (!res.ok) return [];
   const json = await res.json();
   return Array.isArray(json) ? json : (json.data ?? []);
 }
 
-async function getAllEvents(): Promise<Record<string, unknown>[]> {
+async function getSearchIndex(): Promise<SearchEntry[]> {
   const now = Date.now();
-  if (cachedEvents.length > 0 && now - cacheTimestamp < CACHE_TTL_MS) {
-    return cachedEvents;
+  if (searchIndex.length > 0 && now - indexTimestamp < INDEX_TTL_MS) {
+    return searchIndex;
   }
   // Fetch all pages in parallel (500 per page, 8 pages = 4000 max).
   const PAGE = 500;
   const pages = await Promise.all(
     Array.from({ length: 8 }, (_, i) => fetchOpenEvents(PAGE, i * PAGE)),
   );
-  cachedEvents = pages.flat() as Record<string, unknown>[];
-  cacheTimestamp = now;
-  console.log(`[polymarket] cached ${cachedEvents.length} events`);
-  return cachedEvents;
+  const allEvents = pages.flat() as Record<string, unknown>[];
+
+  // Pre-compute search strings once so each query only does string matching.
+  const entries: SearchEntry[] = [];
+  for (const event of allEvents) {
+    const children = Array.isArray(event.markets) ? event.markets : [];
+    const eventTitle = ((event.title as string) ?? "").toLowerCase();
+    const eventBlob = JSON.stringify(event).toLowerCase();
+
+    for (const m of children as Record<string, unknown>[]) {
+      const question = ((m.question as string) ?? "").toLowerCase();
+      if (!m.slug && event.slug) m.slug = event.slug;
+      entries.push({
+        event,
+        market: m,
+        primary: `${eventTitle} ${question}`,
+        blob: `${eventBlob} ${JSON.stringify(m).toLowerCase()}`,
+      });
+    }
+  }
+
+  searchIndex = entries;
+  indexTimestamp = now;
+  console.log(`[polymarket] indexed ${entries.length} markets from ${allEvents.length} events`);
+  return searchIndex;
 }
 
 export async function searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
-  const allEvents = await getAllEvents();
+  const index = await getSearchIndex();
 
-  // Tokenize query for matching. Drop very short words (stop-words like
-  // "of", "the", "in") that would match nearly every JSON blob.
+  // Tokenize query. Drop stop-words (< 3 chars) that match everything.
   const terms = query
     .toLowerCase()
     .split(/\s+/)
@@ -91,43 +118,20 @@ export async function searchMarkets(query: string, limit = 20): Promise<Polymark
     return z.array(MarketSchema).parse([]);
   }
 
-  // Score and filter events by how well they match the query.
-  type ScoredMarket = { market: unknown; score: number };
-  const scored: ScoredMarket[] = [];
+  // Score against pre-computed strings — fast string matching, no JSON.stringify per query.
+  type Hit = { market: unknown; score: number };
+  const hits: Hit[] = [];
 
-  for (const event of allEvents) {
-    const children = Array.isArray(event.markets) ? event.markets : [];
-    const eventTitle = ((event.title as string) ?? "").toLowerCase();
-
-    // Stringify the entire event once for broad keyword matching.
-    // This catches terms in lesser-known fields (resolution sources, tags, etc.)
-    const eventBlob = JSON.stringify(event).toLowerCase();
-
-    for (const m of children as Record<string, unknown>[]) {
-      // Don't filter closed markets — they're still valid oracle targets.
-      const question = ((m.question as string) ?? "").toLowerCase();
-      const marketBlob = JSON.stringify(m).toLowerCase();
-      const broadText = `${eventBlob} ${marketBlob}`;
-
-      // Count broad matches (term found anywhere in event/market JSON).
-      const broadHits = terms.filter((t) => broadText.includes(t)).length;
-      if (broadHits === 0) continue;
-
-      // Boost: title/question matches are worth 3x more than deep-blob matches.
-      const primary = `${eventTitle} ${question}`;
-      const titleHits = terms.filter((t) => primary.includes(t)).length;
-      const score = titleHits * 3 + (broadHits - titleHits);
-
-      // Inherit slug from event if market doesn't have one.
-      if (!m.slug && event.slug) m.slug = event.slug;
-      scored.push({ market: m, score });
-    }
+  for (const entry of index) {
+    const broadHits = terms.filter((t) => entry.blob.includes(t)).length;
+    if (broadHits === 0) continue;
+    // Title/question matches worth 3x more than deep-blob matches.
+    const titleHits = terms.filter((t) => entry.primary.includes(t)).length;
+    hits.push({ market: entry.market, score: titleHits * 3 + (broadHits - titleHits) });
   }
 
-  // Sort by match quality (title matches first, then broad matches).
-  scored.sort((a, b) => b.score - a.score);
-
-  return z.array(MarketSchema).parse(scored.slice(0, limit).map((s) => s.market));
+  hits.sort((a, b) => b.score - a.score);
+  return z.array(MarketSchema).parse(hits.slice(0, limit).map((h) => h.market));
 }
 
 export async function trendingMarkets(limit = 10): Promise<PolymarketMarket[]> {
