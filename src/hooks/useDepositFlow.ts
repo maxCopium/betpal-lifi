@@ -171,7 +171,15 @@ export function useDepositFlow(): DepositFlowState {
       }
     } catch (err) {
       setStatus("Failed.");
-      setError((err as Error).message);
+      const e = err as Record<string, unknown>;
+      // Privy/provider errors sometimes nest details in .details, .reason, or .shortMessage
+      const msg =
+        (typeof e.shortMessage === "string" && e.shortMessage) ||
+        (typeof e.reason === "string" && e.reason) ||
+        (typeof e.details === "string" && e.details) ||
+        (err instanceof Error ? err.message : String(err));
+      console.error("[deposit flow]", err);
+      setError(msg);
     }
   }, []);
 
