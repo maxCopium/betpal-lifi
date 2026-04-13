@@ -39,10 +39,14 @@ const MarketSchema = z
 export type PolymarketMarket = z.infer<typeof MarketSchema>;
 
 /**
- * Gamma's search= param is broken (ignores the query). We fetch open events
- * in bulk and filter server-side by matching query words against event titles
- * and child market questions. Results are cached for 60s via Next fetch cache.
+ * In-memory event cache. Gamma has 3500+ open events; we fetch them all once
+ * and reuse for every search until the TTL expires. This avoids 8 parallel
+ * requests per keystroke and keeps us well under any rate limit.
  */
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+let cachedEvents: Record<string, unknown>[] = [];
+let cacheTimestamp = 0;
+
 async function fetchOpenEvents(pageLimit: number, offset: number): Promise<unknown[]> {
   const url = new URL(`${GAMMA}/events`);
   url.searchParams.set("limit", String(pageLimit));
@@ -50,20 +54,31 @@ async function fetchOpenEvents(pageLimit: number, offset: number): Promise<unkno
   url.searchParams.set("closed", "false");
   const res = await fetch(url.toString(), {
     headers: { accept: "application/json" },
-    next: { revalidate: 60 },
+    cache: "no-store",
   });
   if (!res.ok) return [];
   const json = await res.json();
   return Array.isArray(json) ? json : (json.data ?? []);
 }
 
-export async function searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
-  // Gamma has 3500+ open events. Fetch 8 pages (4000) in parallel to cover them all.
+async function getAllEvents(): Promise<Record<string, unknown>[]> {
+  const now = Date.now();
+  if (cachedEvents.length > 0 && now - cacheTimestamp < CACHE_TTL_MS) {
+    return cachedEvents;
+  }
+  // Fetch all pages in parallel (500 per page, 8 pages = 4000 max).
   const PAGE = 500;
   const pages = await Promise.all(
     Array.from({ length: 8 }, (_, i) => fetchOpenEvents(PAGE, i * PAGE)),
   );
-  const allEvents = pages.flat() as Record<string, unknown>[];
+  cachedEvents = pages.flat() as Record<string, unknown>[];
+  cacheTimestamp = now;
+  console.log(`[polymarket] cached ${cachedEvents.length} events`);
+  return cachedEvents;
+}
+
+export async function searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
+  const allEvents = await getAllEvents();
 
   // Tokenize query for matching. Drop very short words (stop-words like
   // "of", "the", "in") that would match nearly every JSON blob.
