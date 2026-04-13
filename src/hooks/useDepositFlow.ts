@@ -143,20 +143,32 @@ export function useDepositFlow(): DepositFlowState {
         const allowance = BigInt(allowanceHex || "0x0");
         const needed = BigInt(fromAmount);
         if (allowance < needed) {
-          setStatus("Approving token spend…");
+          setStatus("Approve token spend (1 of 2 signatures)…");
           // approve(spender, uint256.max) selector = 0x095ea7b3
           const approveData =
             "0x095ea7b3" +
             approvalAddress.slice(2).padStart(64, "0") +
             "f".repeat(64); // max uint256
-          await provider.request({
+          const approveTxHash = (await provider.request({
             method: "eth_sendTransaction",
             params: [{ from: wallet.address, to: source.token, data: approveData }],
-          });
+          })) as string;
+          // Wait for approval to be mined before sending the swap tx.
+          setStatus("Waiting for approval confirmation…");
+          let mined = false;
+          for (let i = 0; i < 60 && !mined; i++) {
+            const receipt = await provider.request({
+              method: "eth_getTransactionReceipt",
+              params: [approveTxHash],
+            });
+            if (receipt) { mined = true; break; }
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+          if (!mined) throw new Error("approval tx not confirmed after 90s");
         }
       }
 
-      setStatus("Awaiting signature…");
+      setStatus("Sign deposit transaction (2 of 2)…");
       const txParams = {
         from: wallet.address,
         to: quoteRes.quote.transactionRequest.to,
