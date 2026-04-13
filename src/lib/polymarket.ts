@@ -58,47 +58,58 @@ async function fetchOpenEvents(pageLimit: number, offset: number): Promise<unkno
 }
 
 export async function searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
-  // Fetch 2 pages of events in parallel (~1000 events, <1s).
-  const [page1, page2] = await Promise.all([
-    fetchOpenEvents(500, 0),
-    fetchOpenEvents(500, 500),
-  ]);
-  const allEvents = [...page1, ...page2] as Record<string, unknown>[];
+  // Gamma has 3500+ open events. Fetch 8 pages (4000) in parallel to cover them all.
+  const PAGE = 500;
+  const pages = await Promise.all(
+    Array.from({ length: 8 }, (_, i) => fetchOpenEvents(PAGE, i * PAGE)),
+  );
+  const allEvents = pages.flat() as Record<string, unknown>[];
 
-  // Tokenize query for matching.
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  // Tokenize query for matching. Drop very short words (stop-words like
+  // "of", "the", "in") that would match nearly every JSON blob.
+  const terms = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length >= 3);
+
+  if (terms.length === 0) {
+    return z.array(MarketSchema).parse([]);
+  }
 
   // Score and filter events by how well they match the query.
   type ScoredMarket = { market: unknown; score: number };
   const scored: ScoredMarket[] = [];
 
   for (const event of allEvents) {
-    const eventTitle = ((event.title as string) ?? "").toLowerCase();
     const children = Array.isArray(event.markets) ? event.markets : [];
+    const eventTitle = ((event.title as string) ?? "").toLowerCase();
 
     // Stringify the entire event once for broad keyword matching.
-    // This catches terms that live in lesser-known fields (e.g. resolution
-    // sources, tags, comments) which wouldn't be found by checking only
-    // title/question/description.
+    // This catches terms in lesser-known fields (resolution sources, tags, etc.)
     const eventBlob = JSON.stringify(event).toLowerCase();
 
     for (const m of children as Record<string, unknown>[]) {
-      if (m.closed) continue;
+      // Don't filter closed markets — they're still valid oracle targets.
       const question = ((m.question as string) ?? "").toLowerCase();
       const marketBlob = JSON.stringify(m).toLowerCase();
-      const text = `${eventBlob} ${question} ${marketBlob}`;
+      const broadText = `${eventBlob} ${marketBlob}`;
 
-      // Count how many query terms match.
-      const hits = terms.filter((t) => text.includes(t)).length;
-      if (hits === 0) continue;
+      // Count broad matches (term found anywhere in event/market JSON).
+      const broadHits = terms.filter((t) => broadText.includes(t)).length;
+      if (broadHits === 0) continue;
+
+      // Boost: title/question matches are worth 3x more than deep-blob matches.
+      const primary = `${eventTitle} ${question}`;
+      const titleHits = terms.filter((t) => primary.includes(t)).length;
+      const score = titleHits * 3 + (broadHits - titleHits);
 
       // Inherit slug from event if market doesn't have one.
       if (!m.slug && event.slug) m.slug = event.slug;
-      scored.push({ market: m, score: hits });
+      scored.push({ market: m, score });
     }
   }
 
-  // Sort by match quality (most terms matched first).
+  // Sort by match quality (title matches first, then broad matches).
   scored.sort((a, b) => b.score - a.score);
 
   return z.array(MarketSchema).parse(scored.slice(0, limit).map((s) => s.market));
