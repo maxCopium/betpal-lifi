@@ -62,6 +62,9 @@ export function MemberChip({ name, address, role, onSend }: MemberChipProps) {
         style={{
           background: "none",
           border: "none",
+          boxShadow: "none",
+          minWidth: 0,
+          minHeight: 0,
           padding: 0,
           margin: 0,
           font: "inherit",
