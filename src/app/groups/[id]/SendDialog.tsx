@@ -34,9 +34,12 @@ type HoldingsResponse = { holdings: Holding[] };
 export type SendDialogProps = {
   open: boolean;
   onClose: () => void;
-  recipientAddress: `0x${string}`;
-  recipientLabel: string;
+  /** Pre-filled recipient. If omitted, user enters the address manually. */
+  recipientAddress?: `0x${string}`;
+  recipientLabel?: string;
 };
+
+const ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
 
 export function SendDialog({
   open,
@@ -51,7 +54,12 @@ export function SendDialog({
   const [holdingsError, setHoldingsError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [amount, setAmount] = useState("");
+  const [manualAddr, setManualAddr] = useState<string>("");
   const flow = useSendFlow();
+
+  const fixedRecipient = Boolean(recipientAddress);
+  const effectiveRecipient = (recipientAddress ?? (ADDR_RE.test(manualAddr.trim()) ? (manualAddr.trim() as `0x${string}`) : null));
+  const effectiveLabel = recipientLabel ?? (effectiveRecipient ? shortAddr(effectiveRecipient) : "recipient");
 
   // Reset when opening / closing.
   useEffect(() => {
@@ -60,6 +68,7 @@ export function SendDialog({
       setHoldingsError(null);
       setSelectedKey("");
       setAmount("");
+      setManualAddr("");
       return;
     }
     if (!wallet) return;
@@ -99,6 +108,7 @@ export function SendDialog({
     e.preventDefault();
     if (!wallet) return;
     if (!selected) return;
+    if (!effectiveRecipient) return;
     const source: SendSource = {
       label: `${selected.symbol} on ${selected.chainName}`,
       chainId: selected.chainId,
@@ -110,8 +120,8 @@ export function SendDialog({
       source,
       amount,
       wallet,
-      recipientAddress,
-      recipientLabel,
+      recipientAddress: effectiveRecipient,
+      recipientLabel: effectiveLabel,
     });
   }
 
@@ -132,17 +142,37 @@ export function SendDialog({
       >
         <div className="window" style={{ width: 480, maxWidth: "94vw" }}>
           <div className="title-bar">
-            <div className="title-bar-text">Send → {recipientLabel}</div>
+            <div className="title-bar-text">
+              Send{fixedRecipient ? ` → ${effectiveLabel}` : " funds"}
+            </div>
             <div className="title-bar-controls">
               <button aria-label="Close" onClick={onClose} />
             </div>
           </div>
           <div className="window-body">
             <form onSubmit={onSubmit} className="flex flex-col gap-3">
-              <div style={{ fontSize: 12, opacity: 0.8 }}>
-                Recipient:{" "}
-                <code style={{ fontSize: 11 }}>{shortAddr(recipientAddress)}</code>
-              </div>
+              {fixedRecipient && recipientAddress ? (
+                <div style={{ fontSize: 12, opacity: 0.8 }}>
+                  Recipient:{" "}
+                  <code style={{ fontSize: 11 }}>{shortAddr(recipientAddress)}</code>
+                </div>
+              ) : (
+                <div className="field-row-stacked" style={{ gap: 4 }}>
+                  <label htmlFor="send-recipient">Recipient address</label>
+                  <input
+                    id="send-recipient"
+                    type="text"
+                    value={manualAddr}
+                    onChange={(e) => setManualAddr(e.target.value)}
+                    placeholder="0x…"
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                  {manualAddr && !effectiveRecipient && (
+                    <small style={{ color: "#c00" }}>Not a valid address</small>
+                  )}
+                </div>
+              )}
 
               <div className="field-row-stacked" style={{ gap: 4 }}>
                 <label htmlFor="send-holding">From token</label>
@@ -229,6 +259,7 @@ export function SendDialog({
                     !selected ||
                     !amount ||
                     Number(amount) <= 0 ||
+                    !effectiveRecipient ||
                     flow.open
                   }
                 >
@@ -252,7 +283,7 @@ export function SendDialog({
         }
         progress={flow.progress}
         fromLabel={selected ? `${selected.symbol} on ${selected.chainName}` : undefined}
-        toLabel={recipientLabel}
+        toLabel={effectiveLabel}
         onClose={() => {
           flow.reset();
           if (!flow.error) onClose();

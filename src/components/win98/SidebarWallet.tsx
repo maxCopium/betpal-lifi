@@ -9,6 +9,7 @@ import { useState } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { LoginButton } from "@/app/LoginButton";
+import { SendDialog } from "@/app/groups/[id]/SendDialog";
 
 function trimDecimals(val: string, max: number): string {
   const num = Number(val);
@@ -28,6 +29,7 @@ export function SidebarWallet() {
   const { wallets } = useWallets();
   const { balances, loading, refresh } = useWalletBalances();
   const [copied, setCopied] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
 
   function copyAddress(addr: string) {
     void navigator.clipboard.writeText(addr);
@@ -154,14 +156,24 @@ export function SidebarWallet() {
                 <button onClick={openFunding} style={{ flex: 1, padding: "3px 6px" }}>
                   + funds
                 </button>
+                <button
+                  onClick={() => setSendOpen(true)}
+                  style={{ flex: 1, padding: "3px 6px" }}
+                >
+                  Send
+                </button>
                 <button onClick={() => refresh()} disabled={loading} style={{ flex: 1, padding: "3px 6px" }}>
-                  {loading ? "…" : "Refresh"}
+                  {loading ? "…" : "↻"}
                 </button>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {sendOpen && (
+        <SendDialog open={sendOpen} onClose={() => setSendOpen(false)} />
+      )}
     </div>
   );
 }
