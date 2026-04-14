@@ -29,8 +29,10 @@ export class PartialRedeemError extends Error {
   }
 }
 
-/** Minimum ETH needed for ~2 on-chain txs on Base. */
-const MIN_GAS_WEI = parseEther("0.004");
+// With explicit EIP-1559 fee caps in sendGroupTransaction, a Composer
+// withdrawal upfront-needs ~2.5M gas × ~0.05 gwei ≈ 1.25e14 wei.
+// Keep a ~4x safety floor.
+const MIN_GAS_WEI = parseEther("0.0005");
 
 /**
  * Read the USDC-equivalent value held by `owner` in the vault, in cents.
@@ -94,7 +96,7 @@ export async function redeemFromVault(
   if (ethBalance < MIN_GAS_WEI) {
     const ethHave = Number(ethBalance) / 1e18;
     throw new Error(
-      `Group wallet needs at least 0.004 ETH for gas but only has ${ethHave.toFixed(6)} ETH. ` +
+      `Group wallet needs at least 0.0005 ETH for gas but only has ${ethHave.toFixed(6)} ETH. ` +
       `Use "Send gas" to top up the group wallet.`,
     );
   }
