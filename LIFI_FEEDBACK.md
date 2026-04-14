@@ -60,6 +60,21 @@ DeFi product work, and we'd reach for LI.FI again immediately.
   same mistake. (To LI.FI's credit: the fields are already there. This is
   a docs issue, not a missing-feature issue.)
 
+- **`/v1/earn/vault` detail endpoint is unreliable.** It 404s for vaults
+  that `/v1/earn/vaults` lists just fine. Verified live: `bbqUSDC` on Base
+  (`0xbeeff7aE5E00Aae3Db302e4B0d8C883810a58100`, TVL ~$18M) returns
+  `HTTP 404: Vault not found: 8453/0xbeeff…` from the detail endpoint but
+  appears in the list response a second later. Our `findVaultByAddress`
+  now tries detail first and falls back to a paginated list search on
+  404, which makes it resilient but also makes the detail endpoint
+  effectively a "sometimes fast path" rather than a reliable lookup.
+
+- **`tags` filter on `/v1/earn/vaults` is permissive, not strict.**
+  Filtering `tags=stablecoin` still returned at least one vault with
+  `tags: ["multi","il-risk"]` and no "stablecoin" tag. We filter server
+  side on the underlying asset as a second gate, but a strict match on
+  the tag parameter would be a useful guarantee.
+
 - **Composer min-amount behaviour for tiny swaps.** Our early test
   withdrawals were ~2¢ and `/quote` kept rejecting them with
   `errors.filteredOut[].reason = "Price impact exceeds 10%"`. Totally fair

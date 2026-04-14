@@ -134,6 +134,10 @@ export async function listVaults(opts: {
 /**
  * GET /v1/earn/vault — full detail for a single vault.
  * Returns APY breakdown (base/reward/total), historical APY (1d/7d/30d), TVL.
+ *
+ * ⚠️  This endpoint 404s for many vaults that `/v1/earn/vaults` lists just
+ * fine (e.g. bbqUSDC on Base). Callers MUST be prepared to fall back to a
+ * list search. Returns null on 404 so callers can do exactly that.
  */
 export async function getVaultDetail(opts: {
   chainId: number;
