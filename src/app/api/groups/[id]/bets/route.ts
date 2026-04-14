@@ -202,10 +202,61 @@ export async function GET(
       }
     }
 
-    // Enrich with live Polymarket prices (best-effort, parallel)
+    // Pull all stakes for these bets in one query so we can compute
+    // per-bet stake counts, totals, and the caller's own pick + payout.
     const bets = data ?? [];
+    const betIds = bets.map((b) => b.id as string);
+    const stakeMap = new Map<
+      string,
+      {
+        my_outcome: string | null;
+        my_stake_cents: number;
+        stakes_count: number;
+        total_cents: number;
+        winners_count: number; // count of stakers on the winning outcome
+      }
+    >();
+    if (betIds.length > 0) {
+      const { data: stakeRows } = await sb
+        .from("stakes")
+        .select("bet_id, user_id, outcome_chosen, amount_cents")
+        .in("bet_id", betIds);
+      const byBet = new Map<string, { user_id: string; outcome: string; cents: number }[]>();
+      for (const s of stakeRows ?? []) {
+        const arr = byBet.get(s.bet_id as string) ?? [];
+        arr.push({
+          user_id: s.user_id as string,
+          outcome: s.outcome_chosen as string,
+          cents: Number(s.amount_cents),
+        });
+        byBet.set(s.bet_id as string, arr);
+      }
+      for (const b of bets) {
+        const all = byBet.get(b.id as string) ?? [];
+        const mine = all.find((s) => s.user_id === me.id) ?? null;
+        const winners = b.resolution_outcome
+          ? all.filter((s) => s.outcome === b.resolution_outcome).length
+          : 0;
+        stakeMap.set(b.id as string, {
+          my_outcome: mine?.outcome ?? null,
+          my_stake_cents: mine?.cents ?? 0,
+          stakes_count: all.length,
+          total_cents: all.reduce((acc, s) => acc + s.cents, 0),
+          winners_count: winners,
+        });
+      }
+    }
+
+    // Enrich with live Polymarket prices (best-effort, parallel)
     const enriched = await Promise.all(
       bets.map(async (b) => {
+        const stake = stakeMap.get(b.id as string) ?? {
+          my_outcome: null,
+          my_stake_cents: 0,
+          stakes_count: 0,
+          total_cents: 0,
+          winners_count: 0,
+        };
         try {
           const mid = b.polymarket_market_id as string;
           let outcomes: string[] | null = null;
@@ -221,9 +272,13 @@ export async function GET(
             outcomes = parseStringArray(m.outcomes);
             prices = (parseStringArray(m.outcomePrices) ?? []).map(Number);
           }
-          return { ...b, live_prices: outcomes && prices.length ? Object.fromEntries(outcomes.map((o, i) => [o, prices[i]])) : null };
+          return {
+            ...b,
+            live_prices: outcomes && prices.length ? Object.fromEntries(outcomes.map((o, i) => [o, prices[i]])) : null,
+            ...stake,
+          };
         } catch {
-          return { ...b, live_prices: null };
+          return { ...b, live_prices: null, ...stake };
         }
       }),
     );

@@ -92,13 +92,43 @@ export function LoginButton() {
             <button
               type="button"
               onClick={() => { setDraft(me?.display_name ?? ""); setEditing(true); }}
-              style={{ fontSize: 10, padding: "1px 4px", cursor: "pointer" }}
+              title="Rename"
+              aria-label="Rename"
+              style={{
+                minHeight: 0,
+                width: 22,
+                height: 22,
+                padding: 0,
+                fontSize: 12,
+                lineHeight: 1,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
               ✎
             </button>
+            <button
+              type="button"
+              onClick={logout}
+              title="Sign out"
+              aria-label="Sign out"
+              style={{
+                minHeight: 0,
+                width: 22,
+                height: 22,
+                padding: 0,
+                fontSize: 12,
+                lineHeight: 1,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              ⏻
+            </button>
           </span>
         )}
-        <button onClick={logout}>Sign out</button>
       </div>
     );
   }

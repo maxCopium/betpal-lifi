@@ -21,6 +21,11 @@ type BetRow = {
   resolution_outcome: string | null;
   created_at: string;
   live_prices: Record<string, number> | null;
+  my_outcome: string | null;
+  my_stake_cents: number;
+  stakes_count: number;
+  total_cents: number;
+  winners_count: number;
 };
 
 function formatDeadline(iso: string): string {
@@ -110,8 +115,33 @@ export function BetList({
             <span className={`betpal-status ${STATUS_CLASS[b.status] ?? "betpal-status--info"}`}>
               {b.status}
             </span>
+            <span style={{ fontSize: 11, opacity: 0.75 }}>
+              {b.stakes_count} {b.stakes_count === 1 ? "bet" : "bets"}
+            </span>
+            {b.my_outcome && (() => {
+              const isSettled = b.status === "settled" && b.resolution_outcome != null;
+              const won = isSettled && b.my_outcome === b.resolution_outcome;
+              const lost = isSettled && !won;
+              const payout = won && b.winners_count > 0 ? Math.floor(b.total_cents / b.winners_count) : 0;
+              return (
+                <span style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "1px 6px",
+                  background: won ? "#28a745" : lost ? "#dc3545" : "#000080",
+                  color: "#fff",
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}>
+                  You: {b.my_outcome}
+                  {won && <> · won ${(payout / 100).toFixed(2)}</>}
+                  {lost && <> · lost ${(b.my_stake_cents / 100).toFixed(2)}</>}
+                </span>
+              );
+            })()}
             {b.resolution_outcome && (
-              <span style={{ fontWeight: 600 }}>{b.resolution_outcome}</span>
+              <span style={{ fontWeight: 600 }}>Won by {b.resolution_outcome}</span>
             )}
             {b.live_prices && !b.resolution_outcome && (
               <span style={{ display: "inline-flex", gap: 4, fontSize: 11 }}>

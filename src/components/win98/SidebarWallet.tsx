@@ -85,7 +85,17 @@ export function SidebarWallet() {
                     onClick={() => copyAddress(wallet.address)}
                     title={copied ? "Copied!" : "Copy address"}
                     aria-label="Copy address"
-                    style={{ minHeight: 0, padding: "0 4px", fontSize: 11, lineHeight: 1.2 }}
+                    style={{
+                      minHeight: 0,
+                      width: 22,
+                      height: 22,
+                      padding: 0,
+                      fontSize: 12,
+                      lineHeight: 1,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
                   >
                     {copied ? "✓" : "⧉"}
                   </button>
