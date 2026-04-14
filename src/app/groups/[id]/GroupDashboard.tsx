@@ -593,9 +593,9 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
         </div>
       </DraggableWindow>
 
-      {/* ── Bets Window ── */}
-      <DraggableWindow id="bets" title="Bets">
-        <div className="flex flex-col gap-2">
+      {/* ── Bets + Withdraw Window (combined, scrollable body) ── */}
+      <DraggableWindow id="bets" title="Bets & Withdraw" bodyClassName="betpal-scrollable-body">
+        <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <strong style={{ fontSize: 14 }}>Active Bets</strong>
             <button
@@ -606,16 +606,16 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
             </button>
           </div>
           <BetList groupId={groupId} refreshKey={betsRefreshKey} />
-        </div>
-      </DraggableWindow>
 
-      {/* ── Withdraw Window ── */}
-      <DraggableWindow id="withdraw" title="Withdraw">
-        <WithdrawForm
-          groupId={groupId}
-          freeBalanceCents={balance?.user_free_cents ?? 0}
-          onWithdrawn={loadBalance}
-        />
+          <div style={{ borderTop: "1px solid #808080", margin: "8px 0 4px" }} />
+
+          <strong style={{ fontSize: 14 }}>Withdraw</strong>
+          <WithdrawForm
+            groupId={groupId}
+            freeBalanceCents={balance?.user_free_cents ?? 0}
+            onWithdrawn={loadBalance}
+          />
+        </div>
       </DraggableWindow>
 
       <NewBetDialog
