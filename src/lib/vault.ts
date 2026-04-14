@@ -181,18 +181,40 @@ export async function redeemFromVault(
       );
     }
 
-    // Approve the LI.FI diamond to pull our vault shares.
+    // Approve the LI.FI diamond to pull our vault shares. Check existing
+    // allowance first and only approve when short — subsequent withdrawals
+    // reuse the max-uint allowance and save one tx each.
     const diamond = quote.transactionRequest.to as `0x${string}`;
-    const approveHash = await sendGroupContractCall(
-      privyWalletId,
-      vaultAddress,
-      ERC20_ABI,
-      "approve",
-      [diamond, requiredShares],
-    );
-    const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
-    if (approveReceipt.status !== "success") {
-      throw new Error(`vault approve reverted (${approveHash})`);
+    const currentAllowance = (await publicClient.readContract({
+      address: vaultAddress,
+      abi: [
+        {
+          type: "function",
+          name: "allowance",
+          stateMutability: "view",
+          inputs: [
+            { type: "address", name: "owner" },
+            { type: "address", name: "spender" },
+          ],
+          outputs: [{ type: "uint256" }],
+        },
+      ] as const,
+      functionName: "allowance",
+      args: [groupWalletAddress, diamond],
+    })) as bigint;
+    if (currentAllowance < requiredShares) {
+      const MAX_UINT256 = (BigInt(1) << BigInt(256)) - BigInt(1);
+      const approveHash = await sendGroupContractCall(
+        privyWalletId,
+        vaultAddress,
+        ERC20_ABI,
+        "approve",
+        [diamond, MAX_UINT256],
+      );
+      const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
+      if (approveReceipt.status !== "success") {
+        throw new Error(`vault approve reverted (${approveHash})`);
+      }
     }
 
     // Execute the Composer tx — USDC lands directly in recipient wallet.

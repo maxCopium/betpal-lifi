@@ -1,6 +1,6 @@
 import "server-only";
 import { HttpError, errorResponse, requireUser } from "@/lib/auth";
-import { listVaults, vaultApy, vaultTvlUsd, vaultAssetSymbol, vaultProtocolName } from "@/lib/earn";
+import { listVaults, vaultApy, vaultTvlUsd, vaultAssetSymbol, vaultProtocolName, isFullyTransactable } from "@/lib/earn";
 import { BASE_CHAIN_ID } from "@/lib/constants";
 
 /**
@@ -24,7 +24,11 @@ export async function GET(request: Request): Promise<Response> {
       throw new HttpError(502, `LI.FI Earn API failed: ${(fetchErr as Error).message}`);
     }
 
+    // Hide vaults that LI.FI cannot round-trip (no deposit route or no
+    // redeem route). Picking one of those would leave the user's funds
+    // unreachable through the app.
     const projected = vaults
+      .filter(isFullyTransactable)
       .map((v) => {
         const tvl = vaultTvlUsd(v) ?? 0;
         return {

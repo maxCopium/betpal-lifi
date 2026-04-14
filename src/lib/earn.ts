@@ -143,6 +143,16 @@ export async function getVaultDetail(opts: {
 }
 
 /**
+ * Only vaults that LI.FI can actually deposit *and* redeem. Using a vault
+ * without both flags is how you end up with stranded shares — LI.FI's
+ * `/quote` refuses to generate a return route, so withdrawals silently
+ * fall back to direct ERC-4626 which may not exist for every vault token.
+ */
+export function isFullyTransactable(v: EarnVault): boolean {
+  return v.isTransactional !== false && v.isRedeemable !== false;
+}
+
+/**
  * Look up a single vault by address using the list endpoint.
  * The `/v1/earn/vault` detail endpoint returns 404 for many vaults,
  * so we use `/v1/earn/vaults` and filter client-side instead.
@@ -159,23 +169,30 @@ export async function findVaultByAddress(opts: {
 /**
  * Find the highest-APY USDC vault on Base via LI.FI Earn.
  * Used at group creation to auto-select the best vault.
- * Falls back to a known-good vault if the API is down.
+ *
+ * Filters for `isTransactional && isRedeemable` so we never auto-pick a
+ * vault that LI.FI can't round-trip. Sorts by APY among transactable
+ * vaults only. Falls back to a known-good vault if the API is down.
  */
 const FALLBACK_VAULT = "0xbeefe94c8ad530842bfe7d8b397938ffc1cb83b2"; // STEAKUSDC on Base
 
 export async function bestUsdcVaultOnBase(): Promise<{ address: string; name?: string; apy?: number }> {
   try {
+    // Pull more than 1 so we can filter non-transactable ones and still
+    // have a winner. listVaults returns whatever LI.FI has — we filter here.
     const vaults = await listVaults({
       chainId: BASE_CHAIN_ID,
       asset: "USDC",
       sortBy: "apy",
-      limit: 1,
+      limit: 50,
     });
-    if (vaults.length > 0) {
+    const transactable = vaults.filter(isFullyTransactable);
+    if (transactable.length > 0) {
+      // listVaults already sorted by APY desc; pick the top survivor.
       return {
-        address: vaults[0].address,
-        name: vaults[0].name,
-        apy: vaultApy(vaults[0]),
+        address: transactable[0].address,
+        name: transactable[0].name,
+        apy: vaultApy(transactable[0]),
       };
     }
   } catch (e) {

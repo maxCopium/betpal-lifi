@@ -48,15 +48,16 @@ DeFi product work, and we'd reach for LI.FI again immediately.
 
 ## What didn't 100% match expectations
 
-- **No way to know up-front whether a vault is withdrawal-routable.**
-  `/v1/earn/vaults` tells us a vault exists and its APY, but doesn't say
-  whether LI.FI has a return route from the vault token back to USDC.
-  We discovered this only by attempting `/quote/toAmount` with the vault
-  token as `fromToken` and getting "None of the available routes could
-  successfully generate a tx" — repeatedly, for the same vault. We had
-  to ship a fallback to direct ERC-4626 `redeem` + `USDC.transfer`. A
-  boolean on the vault metadata (`withdrawalRoutable`, or a list of
-  supported exit tokens) would have prevented the entire fallback.
+- **`isTransactional` / `isRedeemable` are under-documented.** The flags
+  exist on the `/v1/earn/vaults` response and are exactly what you want
+  for "don't pick a vault I can't round-trip" — but we missed them on a
+  first reading of the docs and the example responses we saw didn't
+  include them. We ended up auto-selecting `bbqUSDC` (no LI.FI redeem
+  route) before discovering we should have been filtering on those
+  fields. Calling them out more loudly in the reference — and in the
+  picker example — would save everyone else from the same mistake. (To
+  LI.FI's credit: the flags are already there. This is a docs issue,
+  not a missing-feature issue.)
 
 - **`estimate.fromAmount` is undocumented / loosely typed on the reverse
   quote.** When calling `/quote/toAmount` we need the required input
@@ -73,7 +74,8 @@ DeFi product work, and we'd reach for LI.FI again immediately.
 
 ## Nice-to-haves
 
-- Vault-level `withdrawalRoutable: bool` (or supported exit tokens) on
-  `/v1/earn/vaults`.
+- Put `isTransactional` / `isRedeemable` front and centre in the
+  `/v1/earn/vaults` docs, with an explicit "filter on both if you want
+  vaults LI.FI can round-trip" note.
 - Document `estimate.fromAmount` on the `/quote/toAmount` response.
 - One-line APY unit clarification in `/v1/earn/vaults`.

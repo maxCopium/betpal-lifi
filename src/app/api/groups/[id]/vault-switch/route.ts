@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { errorResponse, HttpError, requireUser } from "@/lib/auth";
 import { supabaseService } from "@/lib/supabase";
-import { findVaultByAddress, vaultApy } from "@/lib/earn";
+import { findVaultByAddress, vaultApy, isFullyTransactable } from "@/lib/earn";
 import { USDC_BASE } from "@/lib/constants";
 
 /**
@@ -79,6 +79,12 @@ export async function POST(
     const underlying = detail.underlyingTokens?.[0]?.address?.toLowerCase();
     if (underlying !== USDC_BASE.toLowerCase()) {
       throw new HttpError(400, "new vault must use USDC as underlying asset");
+    }
+    if (!isFullyTransactable(detail)) {
+      throw new HttpError(
+        400,
+        "vault is not fully transactable on LI.FI (missing deposit or redeem route)",
+      );
     }
 
     // Store proposal
