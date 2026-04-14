@@ -87,7 +87,8 @@ export function SidebarWallet() {
                     aria-label="Copy address"
                     style={{
                       minHeight: 0,
-                      width: 11,
+                      minWidth: 0,
+                      width: 14,
                       height: 22,
                       padding: 0,
                       fontSize: 11,
@@ -96,6 +97,7 @@ export function SidebarWallet() {
                       display: "inline-flex",
                       alignItems: "center",
                       justifyContent: "center",
+                      boxSizing: "border-box",
                     }}
                   >
                     {copied ? "✓" : "⧉"}

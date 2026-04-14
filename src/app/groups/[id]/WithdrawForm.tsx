@@ -62,18 +62,19 @@ export function WithdrawForm({
       </div>
       <div className="field-row-stacked" style={{ gap: 4 }}>
         <label htmlFor="wd-amount">Amount (USD)</label>
-        <div style={{ display: "flex", gap: 4, alignItems: "stretch" }}>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
           <input
             id="wd-amount"
             type="text"
             inputMode="decimal"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            style={{ flex: 1 }}
+            style={{ flex: 1, height: 32, boxSizing: "border-box" }}
           />
           <button
             type="button"
             onClick={() => setAmount((freeBalanceCents / 100).toFixed(2))}
+            style={{ height: 32, minHeight: 32, boxSizing: "border-box" }}
           >
             Max
           </button>
