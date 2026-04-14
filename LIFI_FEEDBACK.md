@@ -6,23 +6,45 @@ speculation has been left out.
 
 ## What worked well
 
-- **`/quote` with the vault address as `toToken`** — single-signature
-  deposits straight into the Morpho ERC-4626 vault on Base. This is the
-  keystone feature for us; it removed the approve→swap→deposit dance
-  entirely and is the reason we built around Composer at all.
-- **`/v1/connections`** — fast, cached, and the right shape for
-  pre-validating "is this source token routable into the chosen vault?"
-  before showing it in the UI.
-- **`/v1/earn/vaults`** — gave us enough metadata (APY, TVL, protocol,
-  decimals) to build a vault picker without touching protocol-specific
-  endpoints.
-- **Error JSON shape** — `errors.filteredOut[].reason` was structured
-  enough to map directly to a user-facing message (we surface "amount
-  too small — swap price impact exceeds 10%" verbatim from there).
-- **MCP server** (`mcp__lifi__*`) — sped up exploration during the
-  build; we could ask "is there a route from X→Y" without leaving the
-  editor.
-- **Integrator tagging** — straightforward, single query param.
+- **`/quote` with the vault address as `toToken`** — the killer feature
+  for us. A single signature deposits any source token on any chain
+  straight into the Morpho ERC-4626 vault on Base. No approve→swap→
+  deposit dance, no per-protocol adapter code, no manual stitching of
+  intermediate steps. BetPal's whole "tap to deposit, automatically
+  earn yield" UX exists because of this. Without it we wouldn't have
+  shipped the yield half of the app in a hackathon timeframe.
+- **`/v1/earn/vaults`** — clean, well-typed, returned everything we
+  needed (APY, TVL, protocol, token decimals, logos) to build a vault
+  picker and a "switch vault" proposal flow without ever hitting
+  Morpho directly. The fact that BetPal can list vaults, compare APY,
+  and let users vote to migrate is entirely on the back of this one
+  endpoint.
+- **`/v1/connections`** — fast, cached, exactly the right shape for
+  pre-validating "is this source token routable into the chosen
+  vault?" before showing it in the deposit UI. Saved us from having
+  to handle "no route" errors at submit time.
+- **Structured error JSON** — `errors.filteredOut[].reason` was
+  detailed enough that we map it directly to a user-facing message.
+  Our "amount too small — swap price impact exceeds 10%" toast comes
+  verbatim from there. Most APIs make you guess at error semantics
+  from a string; this one gave us reasons we could actually act on.
+- **MCP server** (`mcp__lifi__*`) — genuinely accelerated the build.
+  Being able to ask "what tokens connect Polygon→Base?" or "show me
+  Morpho vaults on Base" from the editor, without writing a script
+  or hitting the docs, shaved hours off exploration. More API
+  vendors should ship MCPs this complete.
+- **Integrator tagging** — single query param, zero ceremony.
+- **Latency** — `/quote`, `/connections`, and `/earn/vaults` all came
+  back fast enough that we never needed to add a loading skeleton on
+  the deposit flow. That's rare for a routing API.
+- **Docs + reference responses** — most fields had concrete examples,
+  which let us hand-build zod schemas in one pass for `/quote`.
+
+Bottom line: Composer is the reason BetPal works. The hard part of
+the app — "let users put money in, earn yield, get paid out" — became
+a question of calling one endpoint per step instead of integrating
+each protocol manually. That's a huge unlock for hackathon-speed
+DeFi product work, and we'd reach for LI.FI again immediately.
 
 ## What didn't 100% match expectations
 
