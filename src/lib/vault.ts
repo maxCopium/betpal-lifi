@@ -165,7 +165,10 @@ export async function redeemFromVault(
       "approve",
       [diamond, requiredShares],
     );
-    await publicClient.waitForTransactionReceipt({ hash: approveHash });
+    const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
+    if (approveReceipt.status !== "success") {
+      throw new Error(`vault approve reverted (${approveHash})`);
+    }
 
     // Execute the Composer tx — USDC lands directly in recipient wallet.
     const composerHash = await sendGroupTransaction(
@@ -174,7 +177,10 @@ export async function redeemFromVault(
       quote.transactionRequest.data as `0x${string}`,
       groupWalletAddress,
     );
-    await publicClient.waitForTransactionReceipt({ hash: composerHash });
+    const composerReceipt = await publicClient.waitForTransactionReceipt({ hash: composerHash });
+    if (composerReceipt.status !== "success") {
+      throw new Error(`Composer tx reverted on-chain (${composerHash})`);
+    }
 
     return { redeemTxHash: composerHash, transferTxHash: composerHash };
   } catch (composerErr) {
@@ -184,6 +190,16 @@ export async function redeemFromVault(
   }
 
   // ── Path B: direct ERC-4626 redeem + USDC.transfer (always works) ──
+  // Snapshot USDC balance so we can transfer exactly what redeem produces
+  // (vault rounding can yield slightly fewer assets than convertToShares
+  // predicted — transferring the requested amount would then revert).
+  const usdcBefore = (await publicClient.readContract({
+    address: USDC_BASE,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [groupWalletAddress],
+  })) as bigint;
+
   // 2. vault.redeem — USDC lands in group wallet.
   const redeemTxHash = await sendGroupContractCall(
     privyWalletId,
@@ -192,33 +208,54 @@ export async function redeemFromVault(
     "redeem",
     [sharesToRedeem, groupWalletAddress, groupWalletAddress],
   );
-  await publicClient.waitForTransactionReceipt({ hash: redeemTxHash });
+  const redeemReceipt = await publicClient.waitForTransactionReceipt({ hash: redeemTxHash });
+  if (redeemReceipt.status !== "success") {
+    throw new Error(`vault.redeem reverted on-chain (${redeemTxHash})`);
+  }
 
-  // 3. Transfer USDC to recipient. Use the requested usdcAmount (not the
-  // assets returned by redeem) so the recipient gets exactly what they
-  // asked for; any dust stays in the group wallet for the next withdrawal.
-  // Retry once: vault shares are already gone — we MUST get USDC out.
-  let transferTxHash: `0x${string}`;
-  try {
-    transferTxHash = await sendGroupContractCall(
+  // Compute actual assets received from the redeem (delta on USDC balance).
+  // Transfer min(requested, received) so the recipient gets what they asked
+  // for when the vault gave us enough, or all of the redeemed dust when it
+  // gave us slightly less.
+  const usdcAfter = (await publicClient.readContract({
+    address: USDC_BASE,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [groupWalletAddress],
+  })) as bigint;
+  const received = usdcAfter - usdcBefore;
+  if (received <= BigInt(0)) {
+    throw new PartialRedeemError(
+      redeemTxHash,
+      new Error(`redeem produced no USDC (before=${usdcBefore} after=${usdcAfter})`),
+    );
+  }
+  const transferAmount = received < usdcAmount ? received : usdcAmount;
+
+  // 3. Transfer USDC to recipient. Retry once: vault shares are already
+  // gone — we MUST get USDC out. Throws PartialRedeemError on permanent fail.
+  async function doTransfer(): Promise<`0x${string}`> {
+    const hash = await sendGroupContractCall(
       privyWalletId,
       USDC_BASE,
       ERC20_ABI,
       "transfer",
-      [recipientAddress, usdcAmount],
+      [recipientAddress, transferAmount],
     );
-    await publicClient.waitForTransactionReceipt({ hash: transferTxHash });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status !== "success") {
+      throw new Error(`USDC.transfer reverted on-chain (${hash})`);
+    }
+    return hash;
+  }
+
+  let transferTxHash: `0x${string}`;
+  try {
+    transferTxHash = await doTransfer();
   } catch (firstErr) {
     console.warn(`USDC transfer failed, retrying once: ${(firstErr as Error).message}`);
     try {
-      transferTxHash = await sendGroupContractCall(
-        privyWalletId,
-        USDC_BASE,
-        ERC20_ABI,
-        "transfer",
-        [recipientAddress, usdcAmount],
-      );
-      await publicClient.waitForTransactionReceipt({ hash: transferTxHash });
+      transferTxHash = await doTransfer();
     } catch (retryErr) {
       throw new PartialRedeemError(redeemTxHash, retryErr as Error);
     }
