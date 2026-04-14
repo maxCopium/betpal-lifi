@@ -19,7 +19,7 @@ type MeResponse = {
 };
 
 export function LoginButton() {
-  const { ready, authenticated, login, logout, user } = usePrivy();
+  const { ready, authenticated, login, user } = usePrivy();
   const [hidden, setHidden] = useState(false);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [editing, setEditing] = useState(false);
@@ -119,28 +119,6 @@ export function LoginButton() {
               }}
             >
               ✎
-            </button>
-            <button
-              type="button"
-              onClick={logout}
-              title="Sign out"
-              aria-label="Sign out"
-              style={{
-                minHeight: 0,
-                minWidth: 0,
-                width: 22,
-                height: 22,
-                padding: 0,
-                fontSize: 11,
-                lineHeight: 1,
-                overflow: "visible",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                boxSizing: "border-box",
-              }}
-            >
-              ⏻
             </button>
             </span>
           </>

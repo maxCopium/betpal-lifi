@@ -25,11 +25,26 @@ function shortenAddr(addr: string): string {
 }
 
 export function SidebarWallet() {
-  const { ready, authenticated, login } = usePrivy();
+  const { ready, authenticated, login, logout } = usePrivy();
   const { wallets } = useWallets();
   const { balances, loading, refresh } = useWalletBalances();
   const [copied, setCopied] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+
+  const iconBtnStyle = {
+    minHeight: 0,
+    minWidth: 0,
+    width: 22,
+    height: 22,
+    padding: 0,
+    fontSize: 11,
+    lineHeight: 1,
+    overflow: "visible",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxSizing: "border-box",
+  } as const;
 
   function copyAddress(addr: string) {
     void navigator.clipboard.writeText(addr);
@@ -61,8 +76,34 @@ export function SidebarWallet() {
   return (
     <div className="betpal-sidebar-wallet">
       <div className="window">
-        <div className="title-bar">
-          <div className="title-bar-text">My Account</div>
+        <div
+          className="title-bar"
+          style={{ display: "flex", alignItems: "center", gap: 4 }}
+        >
+          <div className="title-bar-text" style={{ flex: 1 }}>My Account</div>
+          {authenticated && (
+            <>
+              <button
+                type="button"
+                onClick={() => refresh()}
+                disabled={loading}
+                title="Refresh balances"
+                aria-label="Refresh balances"
+                style={iconBtnStyle}
+              >
+                {loading ? "…" : "↻"}
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                title="Sign out"
+                aria-label="Sign out"
+                style={iconBtnStyle}
+              >
+                ⏻
+              </button>
+            </>
+          )}
         </div>
         <div className="window-body" style={{ padding: "var(--betpal-space-sm)" }}>
           {!authenticated ? (
@@ -161,9 +202,6 @@ export function SidebarWallet() {
                   style={{ flex: 1, padding: "3px 6px" }}
                 >
                   Send
-                </button>
-                <button onClick={() => refresh()} disabled={loading} style={{ flex: 1, padding: "3px 6px" }}>
-                  {loading ? "…" : "↻"}
                 </button>
               </div>
             </div>
