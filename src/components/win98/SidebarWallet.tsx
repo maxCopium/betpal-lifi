@@ -5,8 +5,10 @@
  * Shows address, total balance, token list, and action buttons.
  * Static window (not draggable) — always visible in the left column.
  */
+import { useState } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
+import { LoginButton } from "@/app/LoginButton";
 
 function trimDecimals(val: string, max: number): string {
   const num = Number(val);
@@ -25,6 +27,13 @@ export function SidebarWallet() {
   const { ready, authenticated, login } = usePrivy();
   const { wallets } = useWallets();
   const { balances, loading, refresh } = useWalletBalances();
+  const [copied, setCopied] = useState(false);
+
+  function copyAddress(addr: string) {
+    void navigator.clipboard.writeText(addr);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  }
 
   const wallet =
     wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
@@ -51,7 +60,7 @@ export function SidebarWallet() {
     <div className="betpal-sidebar-wallet">
       <div className="window">
         <div className="title-bar">
-          <div className="title-bar-text">My Wallet</div>
+          <div className="title-bar-text">My Account</div>
         </div>
         <div className="window-body" style={{ padding: "var(--betpal-space-sm)" }}>
           {!authenticated ? (
@@ -63,10 +72,24 @@ export function SidebarWallet() {
             <p style={{ opacity: 0.6, margin: 0 }}>Loading…</p>
           ) : (
             <div className="flex flex-col gap-2">
+              {/* Identity + sign out */}
+              <LoginButton />
+
               {/* Address */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", opacity: 0.7, fontSize: 12 }}>
                 <span>Address</span>
-                <code style={{ fontSize: 11 }}>{shortenAddr(wallet.address)}</code>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <code style={{ fontSize: 11 }}>{shortenAddr(wallet.address)}</code>
+                  <button
+                    type="button"
+                    onClick={() => copyAddress(wallet.address)}
+                    title={copied ? "Copied!" : "Copy address"}
+                    aria-label="Copy address"
+                    style={{ minHeight: 0, padding: "0 4px", fontSize: 11, lineHeight: 1.2 }}
+                  >
+                    {copied ? "✓" : "⧉"}
+                  </button>
+                </span>
               </div>
 
               {/* Total balance */}

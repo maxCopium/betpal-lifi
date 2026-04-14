@@ -1,7 +1,6 @@
 import { Desktop } from "@/components/win98/Desktop";
 import { Window } from "@/components/win98/Window";
 import { BetDetail } from "./BetDetail";
-import { LoginButton } from "@/app/LoginButton";
 
 /**
  * /bets/[id] — bet detail page.
@@ -17,9 +16,6 @@ export default async function BetPage({
   return (
     <Desktop>
       <Window title={`Bet ${id.slice(0, 8)}`}>
-        <div style={{ marginBottom: 8 }}>
-          <LoginButton />
-        </div>
         <BetDetail betId={id} />
       </Window>
     </Desktop>

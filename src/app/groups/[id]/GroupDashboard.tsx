@@ -383,7 +383,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
 
           {/* Server wallet + gas */}
           {gas && gas.needs_funding && (
-            <div className="betpal-alert betpal-alert--error" style={{ fontSize: 12 }}>
+            <div className={`betpal-alert ${gas.balance_eth > 0 ? "betpal-alert--info" : "betpal-alert--error"}`} style={{ fontSize: 12 }}>
               <strong>Gas needed for payouts!</strong> The group wallet has {gas.balance_eth.toFixed(6)} ETH
               ({gas.txs_affordable} txs remaining). Send ~$0.50 of Base ETH to cover ~100 txs:
               <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>

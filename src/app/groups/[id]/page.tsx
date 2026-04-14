@@ -1,5 +1,4 @@
 import { GroupDashboard } from "./GroupDashboard";
-import { LoginButton } from "@/app/LoginButton";
 
 /**
  * /groups/[id] — group dashboard with multiple draggable windows.
@@ -11,12 +10,5 @@ export default async function GroupPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return (
-    <>
-      <div style={{ marginBottom: 8 }}>
-        <LoginButton />
-      </div>
-      <GroupDashboard groupId={id} />
-    </>
-  );
+  return <GroupDashboard groupId={id} />;
 }
