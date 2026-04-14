@@ -316,3 +316,13 @@ CREATE INDEX IF NOT EXISTS polymarket_cache_search_idx
   ON polymarket_cache USING gin (search_text gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS polymarket_cache_end_date_idx
   ON polymarket_cache (end_date) WHERE end_date IS NOT NULL;
+
+-- Allow 'partial' status on transactions (vault redeemed but transfer failed —
+-- USDC sits in group wallet awaiting retry, ledger debit stays in place).
+DO $$ BEGIN
+  ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_status_check;
+  ALTER TABLE transactions ADD CONSTRAINT transactions_status_check
+    CHECK (status IN (
+      'pending','executing','completed','failed','reverted','expired','partial'
+    ));
+END $$;

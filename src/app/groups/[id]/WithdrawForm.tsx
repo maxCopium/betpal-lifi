@@ -4,8 +4,18 @@
  * WithdrawForm — server-side withdrawal from the group's Morpho vault.
  * The server redeems vault shares and sends USDC to the user's wallet.
  */
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { authedFetch } from "@/lib/clientFetch";
+import { fmtCentsPrecise } from "@/lib/format";
+
+type PartialWithdrawal = {
+  id: string;
+  amount_cents: number;
+  status: string;
+  tx_hash: string | null;
+  error_message: string | null;
+  created_at: string;
+};
 
 export function WithdrawForm({
   groupId,
@@ -23,6 +33,35 @@ export function WithdrawForm({
     amountCents: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [partials, setPartials] = useState<PartialWithdrawal[]>([]);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const loadPartials = useCallback(async () => {
+    try {
+      const data = await authedFetch<{ withdrawals: PartialWithdrawal[] }>(
+        `/api/groups/${groupId}/withdrawals?status=partial`,
+      );
+      setPartials(data.withdrawals);
+    } catch { /* silent */ }
+  }, [groupId]);
+
+  useEffect(() => { void loadPartials(); }, [loadPartials]);
+
+  async function retryPartial(id: string) {
+    setRetryingId(id);
+    setError(null);
+    try {
+      await authedFetch(`/api/groups/${groupId}/withdrawals/${id}/retry`, {
+        method: "POST",
+      });
+      await loadPartials();
+      onWithdrawn();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRetryingId(null);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,6 +86,7 @@ export function WithdrawForm({
         body: JSON.stringify({ amountCents }),
       });
       setResult(res);
+      void loadPartials();
       onWithdrawn();
     } catch (e) {
       setError((e as Error).message);
@@ -57,6 +97,28 @@ export function WithdrawForm({
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      {partials.length > 0 && (
+        <div className="betpal-alert betpal-alert--warning" style={{ fontSize: 12 }}>
+          <strong>Stuck withdrawal{partials.length > 1 ? "s" : ""}:</strong> the vault
+          paid out but the transfer to your wallet failed. Retry to claim the USDC
+          waiting in the group wallet.
+          <ul style={{ margin: "6px 0 0 0", padding: 0, listStyle: "none" }}>
+            {partials.map((p) => (
+              <li key={p.id} style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                <span>{fmtCentsPrecise(p.amount_cents)}</span>
+                <button
+                  type="button"
+                  onClick={() => retryPartial(p.id)}
+                  disabled={retryingId === p.id}
+                  style={{ fontSize: 11, padding: "2px 8px" }}
+                >
+                  {retryingId === p.id ? "Retrying…" : "Retry"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div style={{ fontSize: 13, marginBottom: 2 }}>
         Available: <strong>${(freeBalanceCents / 100).toFixed(2)}</strong>
       </div>

@@ -131,6 +131,31 @@ export async function redeemFromVault(
   }
   const sharesToRedeem = sharesWithBuffer < sharesHeld ? sharesWithBuffer : sharesHeld;
 
+  // ── Path 0: use existing USDC dust if it already covers the request ──
+  // Recovers stranded USDC from prior partial withdrawals AND saves the
+  // redeem step whenever the group wallet happens to hold enough USDC.
+  const existingUsdc = (await publicClient.readContract({
+    address: USDC_BASE,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [groupWalletAddress],
+  })) as bigint;
+  if (existingUsdc >= usdcAmount) {
+    const transferHash = await sendGroupContractCall(
+      privyWalletId,
+      USDC_BASE,
+      ERC20_ABI,
+      "transfer",
+      [recipientAddress, usdcAmount],
+    );
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: transferHash });
+    if (receipt.status !== "success") {
+      throw new Error(`USDC.transfer reverted on-chain (${transferHash})`);
+    }
+    // Use the same hash for both fields — no redeem happened, just a transfer.
+    return { redeemTxHash: transferHash, transferTxHash: transferHash };
+  }
+
   // ── Path A: try LI.FI Composer (atomic shares→USDC straight to user) ──
   // Some vaults have a return route via LI.FI; if so, we can do the entire
   // payout in one tx with no intermediate USDC sitting in the group wallet.

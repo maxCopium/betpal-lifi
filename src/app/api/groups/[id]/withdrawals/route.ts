@@ -29,6 +29,54 @@ const Body = z.object({
   amountCents: z.number().int().positive(),
 });
 
+/**
+ * GET /api/groups/[id]/withdrawals?status=partial
+ *
+ * Lists the calling user's withdrawals for this group. Used by the
+ * dashboard to surface stranded `partial` withdrawals so the user can
+ * retry transferring the USDC that's stuck in the group wallet.
+ */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  try {
+    const me = await requireUser(request);
+    const { id: groupId } = await params;
+    const url = new URL(request.url);
+    const statusFilter = url.searchParams.get("status");
+
+    const sb = supabaseService();
+
+    // Membership check.
+    const { data: membership, error: memErr } = await sb
+      .from("group_members")
+      .select("user_id")
+      .eq("group_id", groupId)
+      .eq("user_id", me.id)
+      .maybeSingle();
+    if (memErr) throw new HttpError(500, `member check failed: ${memErr.message}`);
+    if (!membership) throw new HttpError(403, "not a member of this group");
+
+    let query = sb
+      .from("transactions")
+      .select("id, amount_cents, status, tx_hash, error_message, created_at")
+      .eq("group_id", groupId)
+      .eq("user_id", me.id)
+      .eq("type", "withdrawal")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (statusFilter) query = query.eq("status", statusFilter);
+
+    const { data, error } = await query;
+    if (error) throw new HttpError(500, `tx query failed: ${error.message}`);
+
+    return Response.json({ withdrawals: data ?? [] });
+  } catch (e) {
+    return errorResponse(e);
+  }
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
