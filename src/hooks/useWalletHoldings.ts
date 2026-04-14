@@ -12,7 +12,7 @@ export type Holding = TokenBalance & {
 
 /**
  * Fetches the user's token holdings for the "Pay from" selector.
- * Reuses the existing /api/wallet/balance endpoint (Base, fast multicall)
+ * Reuses /api/wallet/balance (Base-only view over LI.FI's hosted indexer)
  * and enriches with chain info for the deposit flow.
  */
 export function useWalletHoldings(walletAddress: string | undefined) {

@@ -17,7 +17,7 @@ export type TokenBalance = {
 
 /**
  * Fetches all non-zero token balances for the user's Privy wallet on Base.
- * Calls /api/wallet/balance which uses LI.FI /v1/tokens + multicall.
+ * Calls /api/wallet/balance which is backed by LI.FI's hosted indexer.
  */
 export function useWalletBalances() {
   const { wallets } = useWallets();
