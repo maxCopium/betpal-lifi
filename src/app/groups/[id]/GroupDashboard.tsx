@@ -14,6 +14,8 @@ import { DraggableWindow } from "@/components/win98/DraggableWindow";
 import { WithdrawForm } from "./WithdrawForm";
 import { NewBetDialog } from "./NewBetDialog";
 import { BetList } from "./BetList";
+import { SendDialog } from "./SendDialog";
+import { MemberChip } from "@/components/MemberChip";
 import { useVaultInfo } from "@/hooks/useVaultInfo";
 import { BASE_CHAIN_ID } from "@/lib/constants";
 import { fmtCents, fmtApy, shortAddr } from "@/lib/format";
@@ -107,6 +109,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
   const [proposal, setProposal] = useState<VaultProposal | null>(null);
   const [vaultActionPending, setVaultActionPending] = useState(false);
   const [vaultMessage, setVaultMessage] = useState<string | null>(null);
+  const [sendTarget, setSendTarget] = useState<{ address: `0x${string}`; label: string } | null>(null);
   const { info: vaultInfo } = useVaultInfo(BASE_CHAIN_ID, group?.vault_address ?? "");
 
   async function runReconcile() {
@@ -334,28 +337,33 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
             <div><strong>Members:</strong> {members.length}</div>
           </div>
 
-          {/* Member list */}
+          {/* Member list — click a name to copy address, "→$" to send funds */}
           {members.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {members.map((m) => (
-                <span
-                  key={m.user_id}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "2px 8px",
-                    background: m.role === "owner" ? "#e6e8ff" : "#f0f0f0",
-                    border: "1px solid #ccc",
-                    fontSize: 12,
-                  }}
-                >
-                  {m.display_name || (m.wallet_address ? shortAddr(m.wallet_address) : "Unknown")}
-                  {m.role === "owner" && (
-                    <span style={{ fontSize: 10, opacity: 0.6 }}>owner</span>
-                  )}
-                </span>
-              ))}
+              {members.map((m) => {
+                const myAddress = wallets[0]?.address?.toLowerCase();
+                const isSelf =
+                  m.wallet_address?.toLowerCase() === myAddress;
+                return (
+                  <MemberChip
+                    key={m.user_id}
+                    name={m.display_name}
+                    address={m.wallet_address}
+                    role={m.role}
+                    onSend={
+                      !isSelf && m.wallet_address
+                        ? () =>
+                            setSendTarget({
+                              address: m.wallet_address as `0x${string}`,
+                              label:
+                                m.display_name ||
+                                shortAddr(m.wallet_address as string),
+                            })
+                        : undefined
+                    }
+                  />
+                );
+              })}
             </div>
           )}
 
@@ -639,6 +647,15 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
         onClose={() => setNewBetOpen(false)}
         onCreated={() => setBetsRefreshKey((k) => k + 1)}
       />
+
+      {sendTarget && (
+        <SendDialog
+          open={true}
+          onClose={() => setSendTarget(null)}
+          recipientAddress={sendTarget.address}
+          recipientLabel={sendTarget.label}
+        />
+      )}
     </>
   );
 }
