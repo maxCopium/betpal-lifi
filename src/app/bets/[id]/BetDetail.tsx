@@ -307,9 +307,10 @@ export function BetDetail({ betId }: { betId: string }) {
           </strong>
         )}
         <strong>{fmtCents(bet.stake_amount_cents)}/person</strong>
-        {bet.max_participants && (
-          <span>{stakes.length}/{bet.max_participants} slots</span>
-        )}
+        <span>
+          <strong>{stakes.length}</strong> {stakes.length === 1 ? "bet" : "bets"}
+          {bet.max_participants && <> / {bet.max_participants}</>}
+        </span>
         <span style={{ opacity: 0.7 }}>
           {bet.start_when_full && bet.status === "open"
             ? `Starts when full${bet.join_deadline ? ` · fallback ${formatDate(bet.join_deadline)}` : ""}`
@@ -389,6 +390,9 @@ export function BetDetail({ betId }: { betId: string }) {
                   )}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 12, opacity: 0.75 }}>
+                    {b.count} {b.count === 1 ? "bet" : "bets"}
+                  </span>
                   <span>{fmtCents(b.cents)} ({pct}%)</span>
                   {b.count > 0 && totalCents > 0 && (
                     <span style={{
@@ -452,24 +456,66 @@ export function BetDetail({ betId }: { betId: string }) {
         const myBucket = buckets.get(my_stake.outcome_chosen);
         const myMaxPayout = myBucket && myBucket.count > 0 ? Math.floor(totalCents / myBucket.count) : 0;
         const myMultiplier = bet.stake_amount_cents > 0 ? (myMaxPayout / bet.stake_amount_cents).toFixed(1) : null;
+        const isSettled = bet.status === "settled" && bet.resolution_outcome != null;
+        const won = isSettled && my_stake.outcome_chosen === bet.resolution_outcome;
+        const lost = isSettled && !won;
         return (
           <>
             <hr style={{ margin: "4px 0", borderTop: "1px solid #ccc" }} />
-            <div style={{ padding: "10px 12px", background: "#f0f4ff", border: "1px solid #b0b8d0" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div>
-                  <strong>Your stake:</strong> {fmtCents(my_stake.amount_cents)} on <strong>{my_stake.outcome_chosen}</strong>
-                </div>
-                {myMaxPayout > 0 && (
+            <div style={{
+              padding: "10px 12px",
+              background: won ? "#e8f5e9" : lost ? "#fdecea" : "#f0f4ff",
+              border: `1px solid ${won ? "#28a745" : lost ? "#dc3545" : "#b0b8d0"}`,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <strong>Your bet:</strong>
                   <span style={{
-                    padding: "3px 10px",
-                    background: "#d4edda",
-                    border: "1px solid #28a745",
+                    padding: "3px 12px",
+                    background: "#000080",
+                    color: "#fff",
                     fontWeight: 700,
                     fontSize: 14,
+                    border: "1px solid #000080",
                   }}>
-                    Max win: {fmtCents(myMaxPayout)}{myMultiplier && <> ({myMultiplier}×)</>}
+                    {my_stake.outcome_chosen}
                   </span>
+                  <span style={{ opacity: 0.75 }}>· staked {fmtCents(my_stake.amount_cents)}</span>
+                </div>
+                {isSettled ? (
+                  won ? (
+                    <span style={{
+                      padding: "4px 12px",
+                      background: "#28a745",
+                      color: "#fff",
+                      fontWeight: 700,
+                      fontSize: 14,
+                    }}>
+                      You won {fmtCents(myMaxPayout)}{myMultiplier && <> ({myMultiplier}×)</>}
+                    </span>
+                  ) : (
+                    <span style={{
+                      padding: "4px 12px",
+                      background: "#dc3545",
+                      color: "#fff",
+                      fontWeight: 700,
+                      fontSize: 14,
+                    }}>
+                      You lost {fmtCents(my_stake.amount_cents)}
+                    </span>
+                  )
+                ) : (
+                  myMaxPayout > 0 && (
+                    <span style={{
+                      padding: "3px 10px",
+                      background: "#d4edda",
+                      border: "1px solid #28a745",
+                      fontWeight: 700,
+                      fontSize: 14,
+                    }}>
+                      Max win: {fmtCents(myMaxPayout)}{myMultiplier && <> ({myMultiplier}×)</>}
+                    </span>
+                  )
                 )}
               </div>
               {hasOdds && (
