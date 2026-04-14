@@ -1,39 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
 import { errorResponse, requireUser } from "@/lib/auth";
 import { env } from "@/lib/env";
-import {
-  createPublicClient,
-  erc20Abi,
-  formatUnits,
-  getAddress,
-  http,
-  isAddress,
-} from "viem";
-import { base, mainnet, polygon, arbitrum, optimism } from "viem/chains";
+import { formatUnits, getAddress, isAddress } from "viem";
 
 /**
  * GET /api/wallet/holdings?address=0x...
  *
- * Fetches the user's non-zero token balances across multiple chains.
- * Uses LI.FI /v1/tokens for the token list, then viem multicall per chain
- * for actual balances (LI.FI has no working balance REST endpoint).
+ * Returns the user's non-zero token balances across the chains we care
+ * about (Base, Ethereum, Polygon, Arbitrum, Optimism).
  *
- * Returns holdings sorted by USD value — used for "Pay from" selector.
+ * Backed by LI.FI's hosted indexer at `GET /v1/wallets/{address}/balances`
+ * — a single HTTP call that returns pre-computed balances across ~38
+ * chains in ~150ms. This replaces the old 5-chain parallel-multicall
+ * implementation which was blowing past Vercel's 10s gateway limit (the
+ * 504s) and also dropping USDC off the end of the token list.
+ *
+ * Prices come from LI.FI `/v1/tokens` so we can show USD values.
  */
 
-export const maxDuration = 30;
+export const maxDuration = 15;
 
 const LIFI_BASE = "https://li.quest/v1";
 
-const CHAINS = [
-  { id: 8453, name: "Base", chain: base },
-  { id: 1, name: "Ethereum", chain: mainnet },
-  { id: 137, name: "Polygon", chain: polygon },
-  { id: 42161, name: "Arbitrum", chain: arbitrum },
-  { id: 10, name: "Optimism", chain: optimism },
-] as const;
+// Chains we surface in the UI. LI.FI returns more than this — filter here
+// so the send-from dropdown stays focused on chains the user is likely to
+// actually care about for EVM USDC routing.
+const CHAIN_NAMES: Record<number, string> = {
+  1: "Ethereum",
+  10: "Optimism",
+  137: "Polygon",
+  8453: "Base",
+  42161: "Arbitrum",
+};
 
-type TokenInfo = {
+type LifiBalanceToken = {
+  address: string;
+  symbol: string;
+  decimals: number;
+  amount: string;
+  name: string;
+  chainId: number;
+};
+
+type LifiBalancesResponse = {
+  walletAddress: string;
+  balances: Record<string, LifiBalanceToken[]>;
+};
+
+type LifiTokenInfo = {
   address: string;
   symbol: string;
   decimals: number;
@@ -56,126 +70,46 @@ export type Holding = {
   valueUSD: number;
 };
 
-/** Fetch top tokens for multiple chains from LI.FI in one request */
-async function getLifiTokens(
-  chainIds: readonly number[],
-): Promise<Record<number, TokenInfo[]>> {
-  try {
-    const res = await fetch(
-      `${LIFI_BASE}/tokens?chains=${chainIds.join(",")}&minPriceUSD=0.10`,
-      {
-        headers: {
-          accept: "application/json",
-          "x-lifi-api-key": env.lifiApiKey(),
-        },
-        next: { revalidate: 300 },
-      },
-    );
-    if (!res.ok) return {};
-    const json = (await res.json()) as {
-      tokens: Record<string, TokenInfo[]>;
-    };
-    const result: Record<number, TokenInfo[]> = {};
-    for (const cid of chainIds) {
-      result[cid] = json.tokens?.[String(cid)] ?? [];
-    }
-    return result;
-  } catch {
-    return {};
+/** One hop: `GET /v1/wallets/{addr}/balances`. Single shot, hosted. */
+async function fetchLifiBalances(wallet: `0x${string}`): Promise<LifiBalancesResponse> {
+  const res = await fetch(`${LIFI_BASE}/wallets/${wallet}/balances`, {
+    headers: {
+      accept: "application/json",
+      "x-lifi-api-key": env.lifiApiKey(),
+    },
+    // Wallet balances change constantly — no caching.
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`LI.FI balances ${res.status}: ${await res.text()}`);
   }
+  return (await res.json()) as LifiBalancesResponse;
 }
 
-/** Check balances for a wallet on one chain via viem multicall */
-async function checkBalancesOnChain(
-  chainDef: (typeof CHAINS)[number],
-  wallet: `0x${string}`,
-  tokens: TokenInfo[],
-): Promise<Holding[]> {
-  const rpcUrl =
-    chainDef.id === 8453
-      ? env.baseRpcUrl()
-      : undefined; // use default public RPC for other chains
-
-  const client = createPublicClient({
-    chain: chainDef.chain,
-    transport: http(rpcUrl),
-  });
-
-  const holdings: Holding[] = [];
-
-  // Native balance
-  try {
-    const nativeBal = await client.getBalance({ address: wallet });
-    if (nativeBal > BigInt(0)) {
-      const nativeToken = tokens.find(
-        (t) => t.address === "0x0000000000000000000000000000000000000000",
-      );
-      const formatted = formatUnits(nativeBal, 18);
-      const price = Number(nativeToken?.priceUSD ?? 0);
-      const valueUSD = price * Number(formatted);
-      if (valueUSD >= 0.01) {
-        holdings.push({
-          chainId: chainDef.id,
-          chainName: chainDef.name,
-          token: "0x0000000000000000000000000000000000000000",
-          symbol: nativeToken?.symbol ?? "ETH",
-          name: nativeToken?.name ?? "Native",
-          decimals: 18,
-          balance: nativeBal.toString(),
-          balanceFormatted: formatted,
-          logoURI: nativeToken?.logoURI,
-          priceUSD: nativeToken?.priceUSD,
-          valueUSD,
-        });
-      }
+/** Token metadata + prices for the chains we care about. Cached 5 min. */
+async function fetchLifiTokens(
+  chainIds: number[],
+): Promise<Map<string, LifiTokenInfo>> {
+  const res = await fetch(
+    `${LIFI_BASE}/tokens?chains=${chainIds.join(",")}&minPriceUSD=0.10`,
+    {
+      headers: {
+        accept: "application/json",
+        "x-lifi-api-key": env.lifiApiKey(),
+      },
+      next: { revalidate: 300 },
+    },
+  );
+  if (!res.ok) return new Map();
+  const json = (await res.json()) as { tokens: Record<string, LifiTokenInfo[]> };
+  // Key on `${chainId}:${addressLower}` so price lookup is O(1).
+  const out = new Map<string, LifiTokenInfo>();
+  for (const [cid, list] of Object.entries(json.tokens ?? {})) {
+    for (const t of list) {
+      out.set(`${cid}:${t.address.toLowerCase()}`, t);
     }
-  } catch (e) { console.warn(`[holdings] native balance failed on ${chainDef.name}:`, (e as Error).message); }
-
-  // ERC-20 balances via multicall
-  const erc20s = tokens
-    .filter((t) => t.address !== "0x0000000000000000000000000000000000000000")
-    .slice(0, 20); // cap to keep fast
-
-  if (erc20s.length === 0) return holdings;
-
-  try {
-    const calls = erc20s.map((t) => ({
-      address: getAddress(t.address) as `0x${string}`,
-      abi: erc20Abi,
-      functionName: "balanceOf" as const,
-      args: [wallet] as const,
-    }));
-
-    const results = await client.multicall({ contracts: calls });
-
-    for (let i = 0; i < erc20s.length; i++) {
-      const result = results[i];
-      if (result.status !== "success") continue;
-      const raw = result.result as bigint;
-      if (raw <= BigInt(0)) continue;
-
-      const t = erc20s[i];
-      const formatted = formatUnits(raw, t.decimals);
-      const valueUSD = Number(t.priceUSD ?? 0) * Number(formatted);
-      if (valueUSD < 0.01) continue;
-
-      holdings.push({
-        chainId: chainDef.id,
-        chainName: chainDef.name,
-        token: t.address,
-        symbol: t.symbol,
-        name: t.name,
-        decimals: t.decimals,
-        balance: raw.toString(),
-        balanceFormatted: formatted,
-        logoURI: t.logoURI,
-        priceUSD: t.priceUSD,
-        valueUSD,
-      });
-    }
-  } catch (e) { console.warn(`[holdings] multicall failed on ${chainDef.name}:`, (e as Error).message); }
-
-  return holdings;
+  }
+  return out;
 }
 
 export async function GET(req: NextRequest) {
@@ -193,42 +127,55 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    console.log(`[holdings] fetching for wallet ${wallet}`);
-    // 1) Fetch token lists for all chains from LI.FI (single request)
-    const allTokens = await getLifiTokens(CHAINS.map((c) => c.id));
-    console.log(`[holdings] LI.FI tokens loaded: ${Object.entries(allTokens).map(([k, v]) => `${k}=${(v as any[]).length}`).join(", ")}`);
+    const chainIds = Object.keys(CHAIN_NAMES).map(Number);
+    const [balances, tokenInfo] = await Promise.all([
+      fetchLifiBalances(wallet),
+      fetchLifiTokens(chainIds),
+    ]);
 
-    // 2) Check balances across all chains in parallel. Per-chain 6s timeout
-    //    so one slow public RPC can't wedge the whole request past Vercel's
-    //    10s gateway limit — that's the 504 people see.
-    const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
-      Promise.race([
-        p,
-        new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-      ]);
+    const holdings: Holding[] = [];
+    for (const [cidStr, tokens] of Object.entries(balances.balances)) {
+      const chainId = Number(cidStr);
+      const chainName = CHAIN_NAMES[chainId];
+      if (!chainName) continue; // skip chains we don't support
 
-    const chainResults = await Promise.all(
-      CHAINS.map((chainDef) => {
-        const tokens = allTokens[chainDef.id] ?? [];
-        const sorted = [...tokens].sort(
-          (a, b) => Number(b.priceUSD ?? 0) - Number(a.priceUSD ?? 0),
-        );
-        return withTimeout(
-          checkBalancesOnChain(chainDef, wallet, sorted),
-          6000,
-          [] as Holding[],
-        ).catch((e) => {
-          console.warn(`[holdings] ${chainDef.name} failed: ${(e as Error).message}`);
-          return [] as Holding[];
+      for (const t of tokens) {
+        if (!t.amount || t.amount === "0") continue;
+        const raw = BigInt(t.amount);
+        if (raw === BigInt(0)) continue;
+
+        const formatted = formatUnits(raw, t.decimals);
+        const meta = tokenInfo.get(`${chainId}:${t.address.toLowerCase()}`);
+        const priceUSD = meta?.priceUSD;
+        const valueUSD = priceUSD ? Number(priceUSD) * Number(formatted) : 0;
+
+        // Keep priced tokens worth ≥ $0.01 plus any native token regardless
+        // of price so users always see ETH/etc. for gas. Drop dust.
+        const isNative = t.address === "0x0000000000000000000000000000000000000000";
+        if (!isNative && valueUSD < 0.01) continue;
+        if (isNative && Number(formatted) < 0.00001) continue;
+
+        holdings.push({
+          chainId,
+          chainName,
+          token: t.address,
+          symbol: meta?.symbol ?? t.symbol,
+          name: meta?.name ?? t.name,
+          decimals: t.decimals,
+          balance: t.amount,
+          balanceFormatted: formatted,
+          logoURI: meta?.logoURI,
+          priceUSD,
+          valueUSD,
         });
-      }),
-    );
+      }
+    }
 
-    const allHoldings = chainResults.flat();
-    allHoldings.sort((a, b) => b.valueUSD - a.valueUSD);
-    console.log(`[holdings] found ${allHoldings.length} tokens: ${allHoldings.map(h => `${h.symbol}@${h.chainName}`).join(", ")}`);
+    // Sort by USD value desc so the picker defaults to the most valuable
+    // holding when the user hasn't yet chosen.
+    holdings.sort((a, b) => b.valueUSD - a.valueUSD);
 
-    return NextResponse.json({ holdings: allHoldings });
+    return NextResponse.json({ holdings });
   } catch (err) {
     return errorResponse(err);
   }
