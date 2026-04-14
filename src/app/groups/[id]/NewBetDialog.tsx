@@ -99,6 +99,9 @@ export function NewBetDialog({
       setError(null);
       setJoinDeadline(defaultJoinDeadline());
       setStakeAmountUsd("5");
+      setMaxParticipants("");
+      setStartWhenFull(false);
+      setShowAdvanced(false);
     }
   }, [open]);
 

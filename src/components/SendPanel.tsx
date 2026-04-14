@@ -131,7 +131,22 @@ export function SendPanel({ onClose }: { onClose: () => void }) {
             flow.reset();
             onClose();
           }}
-          style={{ fontSize: 11, padding: "1px 6px" }}
+          title="Close"
+          aria-label="Close"
+          style={{
+            minHeight: 0,
+            minWidth: 0,
+            width: 22,
+            height: 22,
+            padding: 0,
+            fontSize: 11,
+            lineHeight: 1,
+            overflow: "visible",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxSizing: "border-box",
+          }}
         >
           ×
         </button>
@@ -193,7 +208,7 @@ export function SendPanel({ onClose }: { onClose: () => void }) {
           <label htmlFor="sp-amount" style={{ fontSize: 11 }}>
             Amount {selected ? `(${selected.symbol})` : ""}
           </label>
-          <div style={{ display: "flex", gap: 4 }}>
+          <div style={{ display: "flex", gap: 4, alignItems: "stretch" }}>
             <input
               id="sp-amount"
               type="text"
@@ -207,7 +222,13 @@ export function SendPanel({ onClose }: { onClose: () => void }) {
               type="button"
               onClick={handleMax}
               disabled={!selected}
-              style={{ fontSize: 11, padding: "1px 6px" }}
+              style={{
+                fontSize: 10,
+                padding: "0 6px",
+                minHeight: 0,
+                lineHeight: 1,
+                alignSelf: "stretch",
+              }}
             >
               Max
             </button>
@@ -252,32 +273,20 @@ export function SendPanel({ onClose }: { onClose: () => void }) {
               Close
             </button>
           ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  flow.reset();
-                  onClose();
-                }}
-                style={{ fontSize: 11, padding: "2px 8px" }}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={
-                  !wallet ||
-                  !selected ||
-                  !amount ||
-                  Number(amount) <= 0 ||
-                  !recipientValid ||
-                  busy
-                }
-                style={{ fontSize: 11, padding: "2px 8px" }}
-              >
-                {busy ? "Sending…" : "Send"}
-              </button>
-            </>
+            <button
+              type="submit"
+              disabled={
+                !wallet ||
+                !selected ||
+                !amount ||
+                Number(amount) <= 0 ||
+                !recipientValid ||
+                busy
+              }
+              style={{ fontSize: 11, padding: "2px 8px" }}
+            >
+              {busy ? "Sending…" : "Send"}
+            </button>
           )}
         </div>
       </form>
