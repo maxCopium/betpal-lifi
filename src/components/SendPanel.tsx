@@ -208,7 +208,7 @@ export function SendPanel({ onClose }: { onClose: () => void }) {
           <label htmlFor="sp-amount" style={{ fontSize: 11 }}>
             Amount {selected ? `(${selected.symbol})` : ""}
           </label>
-          <div style={{ display: "flex", gap: 4, alignItems: "stretch" }}>
+          <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
             <input
               id="sp-amount"
               type="text"
@@ -216,7 +216,12 @@ export function SendPanel({ onClose }: { onClose: () => void }) {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
-              style={{ flex: 1, fontSize: 11 }}
+              style={{
+                flex: 1,
+                fontSize: 11,
+                height: 22,
+                boxSizing: "border-box",
+              }}
             />
             <button
               type="button"
@@ -224,10 +229,13 @@ export function SendPanel({ onClose }: { onClose: () => void }) {
               disabled={!selected}
               style={{
                 fontSize: 10,
-                padding: "0 6px",
+                padding: 0,
                 minHeight: 0,
+                minWidth: 0,
+                width: 36,
+                height: 22,
                 lineHeight: 1,
-                alignSelf: "stretch",
+                boxSizing: "border-box",
               }}
             >
               Max
