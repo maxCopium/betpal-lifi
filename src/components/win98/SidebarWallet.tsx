@@ -9,7 +9,7 @@ import { useState } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { LoginButton } from "@/app/LoginButton";
-import { SendDialog } from "@/app/groups/[id]/SendDialog";
+import { SendPanel } from "@/components/SendPanel";
 
 function trimDecimals(val: string, max: number): string {
   const num = Number(val);
@@ -200,18 +200,17 @@ export function SidebarWallet() {
                 <button
                   onClick={() => setSendOpen(true)}
                   style={{ flex: 1, padding: "3px 6px" }}
+                  disabled={sendOpen}
                 >
                   Send
                 </button>
               </div>
+
+              {sendOpen && <SendPanel onClose={() => setSendOpen(false)} />}
             </div>
           )}
         </div>
       </div>
-
-      {sendOpen && (
-        <SendDialog open={sendOpen} onClose={() => setSendOpen(false)} />
-      )}
     </div>
   );
 }

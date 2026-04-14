@@ -198,15 +198,29 @@ export async function GET(req: NextRequest) {
     const allTokens = await getLifiTokens(CHAINS.map((c) => c.id));
     console.log(`[holdings] LI.FI tokens loaded: ${Object.entries(allTokens).map(([k, v]) => `${k}=${(v as any[]).length}`).join(", ")}`);
 
-    // 2) Check balances across all chains in parallel
+    // 2) Check balances across all chains in parallel. Per-chain 6s timeout
+    //    so one slow public RPC can't wedge the whole request past Vercel's
+    //    10s gateway limit — that's the 504 people see.
+    const withTimeout = <T,>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
+      Promise.race([
+        p,
+        new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+      ]);
+
     const chainResults = await Promise.all(
       CHAINS.map((chainDef) => {
         const tokens = allTokens[chainDef.id] ?? [];
-        // Sort by price desc, take top tokens
         const sorted = [...tokens].sort(
           (a, b) => Number(b.priceUSD ?? 0) - Number(a.priceUSD ?? 0),
         );
-        return checkBalancesOnChain(chainDef, wallet, sorted);
+        return withTimeout(
+          checkBalancesOnChain(chainDef, wallet, sorted),
+          6000,
+          [] as Holding[],
+        ).catch((e) => {
+          console.warn(`[holdings] ${chainDef.name} failed: ${(e as Error).message}`);
+          return [] as Holding[];
+        });
       }),
     );
 
