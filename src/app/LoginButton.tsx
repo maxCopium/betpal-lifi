@@ -64,7 +64,7 @@ export function LoginButton() {
         ?? (wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "user");
 
     return (
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", width: "100%" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", width: "100%" }}>
         {editing ? (
           <form
             onSubmit={(e) => { e.preventDefault(); void saveName(); }}
@@ -95,8 +95,9 @@ export function LoginButton() {
             </button>
           </form>
         ) : (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <strong>{identity}</strong>
+          <>
+            <strong style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{identity}</strong>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
             <button
               type="button"
               onClick={() => { setDraft(me?.display_name ?? ""); setEditing(true); }}
@@ -141,7 +142,8 @@ export function LoginButton() {
             >
               ⏻
             </button>
-          </span>
+            </span>
+          </>
         )}
       </div>
     );
