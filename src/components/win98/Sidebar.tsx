@@ -135,7 +135,7 @@ export function Sidebar() {
                 className="betpal-nav-link"
                 style={{ fontWeight: isNewGroup ? 700 : 400 }}
               >
-                ➕ New Group
+                ➕ Group
               </Link>
             </li>
 

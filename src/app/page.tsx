@@ -24,10 +24,9 @@ export default function HomePage() {
           </p>
           <LoginButton />
         </fieldset>
-        <fieldset style={{ marginTop: 12 }}>
-          <legend>Your groups</legend>
+        <div style={{ marginTop: 12 }}>
           <GroupsHomePanel />
-        </fieldset>
+        </div>
       </Window>
 
       <Window title="How it works">

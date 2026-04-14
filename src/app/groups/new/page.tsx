@@ -11,7 +11,7 @@ import { NewGroupForm } from "./NewGroupForm";
 export default function NewGroupPage() {
   return (
     <Desktop>
-      <Window title="New Group">
+      <Window title="+ Group">
         <NewGroupForm />
       </Window>
     </Desktop>

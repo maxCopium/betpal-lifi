@@ -392,10 +392,25 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
                 </code>
                 <button
                   type="button"
-                  style={{ fontSize: 10, padding: "1px 6px", whiteSpace: "nowrap" }}
+                  title="Copy address"
+                  aria-label="Copy address"
                   onClick={() => navigator.clipboard.writeText(gas.wallet_address)}
+                  style={{
+                    minHeight: 0,
+                    minWidth: 0,
+                    width: 22,
+                    height: 22,
+                    padding: 0,
+                    fontSize: 12,
+                    lineHeight: 1,
+                    overflow: "visible",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxSizing: "border-box",
+                  }}
                 >
-                  Copy
+                  ⧉
                 </button>
                 <input
                   type="number"
@@ -579,7 +594,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
           {/* Invite */}
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button onClick={createInvite} disabled={inviting || group.status !== "pending"}>
-              {inviting ? "Generating…" : "Invite a friend"}
+              {inviting ? "Generating…" : "+ Friend"}
             </button>
           </div>
           {inviteError && (
@@ -601,7 +616,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
               onClick={() => setNewBetOpen(true)}
               disabled={group.status === "closed"}
             >
-              New bet
+              + Bet
             </button>
           </div>
           <BetList groupId={groupId} refreshKey={betsRefreshKey} />

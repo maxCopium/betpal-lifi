@@ -53,9 +53,10 @@ export function GroupsHomePanel() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <strong>Your groups</strong>
         <Link href="/groups/new">
-          <button>+ New group</button>
+          <button>+ Group</button>
         </Link>
       </div>
       {groups === null ? (

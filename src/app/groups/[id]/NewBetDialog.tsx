@@ -157,7 +157,7 @@ export function NewBetDialog({
     >
       <div className="window" style={{ width: 560, maxWidth: "94vw" }}>
         <div className="title-bar">
-          <div className="title-bar-text">New Bet</div>
+          <div className="title-bar-text">+ Bet</div>
           <div className="title-bar-controls">
             <button aria-label="Close" onClick={onClose} />
           </div>

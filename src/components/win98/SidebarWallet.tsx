@@ -152,7 +152,7 @@ export function SidebarWallet() {
               {/* Actions */}
               <div className="flex gap-2">
                 <button onClick={openFunding} style={{ flex: 1, padding: "3px 6px" }}>
-                  Add funds
+                  + funds
                 </button>
                 <button onClick={() => refresh()} disabled={loading} style={{ flex: 1, padding: "3px 6px" }}>
                   {loading ? "…" : "Refresh"}

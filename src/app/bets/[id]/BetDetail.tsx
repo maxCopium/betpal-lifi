@@ -367,7 +367,6 @@ export function BetDetail({ betId }: { betId: string }) {
         {bet.options.map((o) => {
           const b = buckets.get(o)!;
           const pct = totalCents > 0 ? Math.round((b.cents / totalCents) * 100) : 0;
-          const livePrice = priceMap.get(o);
           const payoutPerWinner = b.count > 0 ? Math.floor(totalCents / b.count) : totalCents;
           const multiplier = b.count > 0 && bet.stake_amount_cents > 0
             ? (payoutPerWinner / bet.stake_amount_cents).toFixed(1)
@@ -377,17 +376,6 @@ export function BetDetail({ betId }: { betId: string }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <strong>{o}</strong>
-                  {livePrice != null && (
-                    <span style={{
-                      fontSize: 11,
-                      padding: "1px 6px",
-                      background: livePrice >= 0.5 ? "#d4edda" : "#f0f0f0",
-                      border: "1px solid #ccc",
-                      opacity: 0.8,
-                    }}>
-                      {Math.round(livePrice * 100)}%
-                    </span>
-                  )}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 12, opacity: 0.75 }}>
