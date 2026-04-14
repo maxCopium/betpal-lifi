@@ -64,25 +64,33 @@ export function LoginButton() {
         ?? (wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "user");
 
     return (
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", width: "100%" }}>
         {editing ? (
           <form
             onSubmit={(e) => { e.preventDefault(); void saveName(); }}
-            style={{ display: "flex", gap: 4, alignItems: "center" }}
+            style={{ display: "flex", gap: 4, alignItems: "center", width: "100%", minWidth: 0 }}
           >
             <input
               type="text"
-              placeholder="Pick a username"
+              placeholder="Username"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               maxLength={30}
-              style={{ width: 140, fontSize: 12 }}
+              style={{ flex: 1, minWidth: 0, fontSize: 12 }}
               autoFocus
             />
-            <button type="submit" disabled={saving || !draft.trim()} style={{ fontSize: 11 }}>
+            <button
+              type="submit"
+              disabled={saving || !draft.trim()}
+              style={{ fontSize: 11, minWidth: 0, padding: "2px 6px" }}
+            >
               {saving ? "…" : "Save"}
             </button>
-            <button type="button" onClick={() => setEditing(false)} style={{ fontSize: 11 }}>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              style={{ fontSize: 11, minWidth: 0, padding: "2px 6px" }}
+            >
               Cancel
             </button>
           </form>
