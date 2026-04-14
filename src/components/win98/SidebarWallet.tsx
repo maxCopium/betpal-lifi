@@ -88,7 +88,7 @@ export function SidebarWallet() {
                     style={{
                       minHeight: 0,
                       minWidth: 0,
-                      width: 14,
+                      width: 22,
                       height: 22,
                       padding: 0,
                       fontSize: 11,
