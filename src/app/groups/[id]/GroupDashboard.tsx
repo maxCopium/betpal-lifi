@@ -325,9 +325,10 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
 
   return (
     <>
-      {/* ── Group Info Window ── */}
-      <DraggableWindow id="group-info" title={group.name}>
+      {/* ── Combined Window: Group Info + Bets + Withdraw ── */}
+      <DraggableWindow id="group-info" title={group.name} bodyClassName="betpal-scrollable-body">
         <div className="flex flex-col gap-3">
+          <strong style={{ fontSize: 14 }}>Group</strong>
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <div><strong>Status:</strong> {group.status}</div>
             <div><strong>Members:</strong> {members.length}</div>
@@ -590,12 +591,10 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
               <code className="break-all" style={{ fontSize: 12 }}>{inviteLink}</code>
             </div>
           )}
-        </div>
-      </DraggableWindow>
 
-      {/* ── Bets + Withdraw Window (combined, scrollable body) ── */}
-      <DraggableWindow id="bets" title="Bets & Withdraw" bodyClassName="betpal-scrollable-body">
-        <div className="flex flex-col gap-3">
+          <div style={{ borderTop: "1px solid #808080", margin: "8px 0 4px" }} />
+
+          {/* ── Bets section ── */}
           <div className="flex items-center justify-between">
             <strong style={{ fontSize: 14 }}>Active Bets</strong>
             <button
@@ -609,6 +608,7 @@ export function GroupDashboard({ groupId }: { groupId: string }) {
 
           <div style={{ borderTop: "1px solid #808080", margin: "8px 0 4px" }} />
 
+          {/* ── Withdraw section ── */}
           <strong style={{ fontSize: 14 }}>Withdraw</strong>
           <WithdrawForm
             groupId={groupId}
