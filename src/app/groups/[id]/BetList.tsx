@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { authedFetch } from "@/lib/clientFetch";
+import { fmtCentsPrecise } from "@/lib/format";
 
 type BetRow = {
   id: string;
@@ -108,7 +109,7 @@ export function BetList({
               {b.title}
             </Link>
             <span style={{ fontSize: 12, opacity: 0.7, whiteSpace: "nowrap", marginLeft: 8 }}>
-              ${(b.stake_amount_cents / 100).toFixed(0)}/person
+              {fmtCentsPrecise(b.stake_amount_cents)}/person
             </span>
           </div>
           <div style={{ marginTop: 4, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -135,8 +136,8 @@ export function BetList({
                   fontWeight: 700,
                 }}>
                   You: {b.my_outcome}
-                  {won && <> · won ${(payout / 100).toFixed(2)}</>}
-                  {lost && <> · lost ${(b.my_stake_cents / 100).toFixed(2)}</>}
+                  {won && <> · won {fmtCentsPrecise(payout)}</>}
+                  {lost && <> · lost {fmtCentsPrecise(b.my_stake_cents)}</>}
                 </span>
               );
             })()}

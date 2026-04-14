@@ -11,6 +11,11 @@ export function fmtCents(cents: number): string {
   });
 }
 
+/** Format integer cents with extra precision — useful for tiny test amounts. */
+export function fmtCentsPrecise(cents: number): string {
+  return `$${(cents / 100).toFixed(4)}`;
+}
+
 /** Truncate an address to 0x1234…abcd form. */
 export function shortAddr(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;

@@ -1,18 +1,19 @@
 import "server-only";
 import { parseEther } from "viem";
 import { basePublicClient } from "./viem";
-import { sendGroupContractCall } from "./groupWallet";
-import { USDC_BASE, CENTS_TO_USDC_UNITS } from "./constants";
+import { sendGroupContractCall, sendGroupTransaction } from "./groupWallet";
+import { USDC_BASE, CENTS_TO_USDC_UNITS, BASE_CHAIN_ID } from "./constants";
 import { ERC4626_ABI, ERC20_ABI } from "./abis";
+import { getComposerReverseQuote } from "./composer";
 
 /**
  * ERC-4626 vault helpers — redeem + transfer for payouts/withdrawals.
  *
  * Deposits go directly into the vault via LI.FI Composer (user-signed).
- * Withdrawals use the standard ERC-4626 redeem(shares, receiver, owner)
- * call, signed by the group's Privy server wallet, then USDC.transfer to
- * the recipient. We do NOT use LI.FI for withdrawals because not every
- * vault has a return route in the LI.FI router.
+ * Withdrawals try LI.FI Composer first (atomic shares→USDC straight to
+ * the user's wallet) and fall back to the standard ERC-4626
+ * redeem(shares, receiver, owner) + USDC.transfer two-step if Composer
+ * has no return route for this vault.
  *
  * Vault address is always per-group (from the DB), never from env.
  * Signing is done via Privy server wallets — no local private keys.
@@ -130,6 +131,59 @@ export async function redeemFromVault(
   }
   const sharesToRedeem = sharesWithBuffer < sharesHeld ? sharesWithBuffer : sharesHeld;
 
+  // ── Path A: try LI.FI Composer (atomic shares→USDC straight to user) ──
+  // Some vaults have a return route via LI.FI; if so, we can do the entire
+  // payout in one tx with no intermediate USDC sitting in the group wallet.
+  try {
+    const quote = await getComposerReverseQuote({
+      fromChain: BASE_CHAIN_ID,
+      toChain: BASE_CHAIN_ID,
+      fromToken: vaultAddress,
+      toToken: USDC_BASE,
+      toAmount: usdcAmount.toString(),
+      fromAddress: groupWalletAddress,
+      toAddress: recipientAddress,
+      slippage: 0.005,
+    });
+
+    // Sanity check: required input shares must fit our balance.
+    const requiredShares = BigInt(
+      (quote.estimate as { fromAmount?: string }).fromAmount ?? "0",
+    );
+    if (requiredShares === BigInt(0) || requiredShares > sharesHeld) {
+      throw new Error(
+        `Composer requires ${requiredShares} shares but group holds ${sharesHeld}`,
+      );
+    }
+
+    // Approve the LI.FI diamond to pull our vault shares.
+    const diamond = quote.transactionRequest.to as `0x${string}`;
+    const approveHash = await sendGroupContractCall(
+      privyWalletId,
+      vaultAddress,
+      ERC20_ABI,
+      "approve",
+      [diamond, requiredShares],
+    );
+    await publicClient.waitForTransactionReceipt({ hash: approveHash });
+
+    // Execute the Composer tx — USDC lands directly in recipient wallet.
+    const composerHash = await sendGroupTransaction(
+      privyWalletId,
+      diamond,
+      quote.transactionRequest.data as `0x${string}`,
+      groupWalletAddress,
+    );
+    await publicClient.waitForTransactionReceipt({ hash: composerHash });
+
+    return { redeemTxHash: composerHash, transferTxHash: composerHash };
+  } catch (composerErr) {
+    console.warn(
+      `Composer withdrawal unavailable, falling back to direct redeem: ${(composerErr as Error).message}`,
+    );
+  }
+
+  // ── Path B: direct ERC-4626 redeem + USDC.transfer (always works) ──
   // 2. vault.redeem — USDC lands in group wallet.
   const redeemTxHash = await sendGroupContractCall(
     privyWalletId,
