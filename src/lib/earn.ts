@@ -47,6 +47,10 @@ const VaultSchema = z
             base: z.number().nullish(),
             reward: z.number().nullish(),
             total: z.number(),
+            // Historical APY points — useful for "past 7d yield" UI.
+            apy1d: z.number().nullish(),
+            apy7d: z.number().nullish(),
+            apy30d: z.number().nullish(),
           })
           .passthrough()
           .nullish(),
@@ -59,6 +63,11 @@ const VaultSchema = z
       })
       .passthrough()
       .optional(),
+    tags: z.array(z.string()).optional(),
+    // LI.FI's routing packs — empty `redeemPacks` means no Composer return
+    // route, even if `isRedeemable` is true. Belt-and-braces filter.
+    depositPacks: z.array(z.unknown()).optional(),
+    redeemPacks: z.array(z.unknown()).optional(),
     isTransactional: z.boolean().optional(),
     isRedeemable: z.boolean().optional(),
   })
@@ -97,12 +106,17 @@ export async function listVaults(opts: {
   asset?: string;
   sortBy?: string;
   limit?: number;
+  tags?: string | string[];
 }): Promise<EarnVault[]> {
   const url = new URL(`${EARN_BASE}/v1/earn/vaults`);
   if (opts.chainId) url.searchParams.set("chainId", String(opts.chainId));
   if (opts.asset) url.searchParams.set("asset", opts.asset);
   if (opts.sortBy) url.searchParams.set("sortBy", opts.sortBy);
   if (opts.limit) url.searchParams.set("limit", String(opts.limit));
+  if (opts.tags) {
+    const tags = Array.isArray(opts.tags) ? opts.tags.join(",") : opts.tags;
+    url.searchParams.set("tags", tags);
+  }
   const res = await fetch(url.toString(), {
     headers: { accept: "application/json" },
   });
@@ -124,7 +138,7 @@ export async function listVaults(opts: {
 export async function getVaultDetail(opts: {
   chainId: number;
   address: string;
-}): Promise<EarnVault> {
+}): Promise<EarnVault | null> {
   const url = new URL(`${EARN_BASE}/v1/earn/vault`);
   url.searchParams.set("chainId", String(opts.chainId));
   url.searchParams.set("address", opts.address);
@@ -132,6 +146,7 @@ export async function getVaultDetail(opts: {
     headers: { accept: "application/json" },
     next: { revalidate: 60 }, // cache 1 min — APY changes often
   });
+  if (res.status === 404) return null;
   if (!res.ok) {
     const body = await res.text();
     throw new Error(
@@ -139,7 +154,9 @@ export async function getVaultDetail(opts: {
     );
   }
   const json = await res.json();
-  return VaultSchema.parse(json);
+  // API returns { data: vault } or the vault directly; normalize.
+  const payload = (json && typeof json === "object" && "data" in json) ? json.data : json;
+  return VaultSchema.parse(payload);
 }
 
 /**
@@ -149,19 +166,41 @@ export async function getVaultDetail(opts: {
  * fall back to direct ERC-4626 which may not exist for every vault token.
  */
 export function isFullyTransactable(v: EarnVault): boolean {
-  return v.isTransactional !== false && v.isRedeemable !== false;
+  if (v.isTransactional === false || v.isRedeemable === false) return false;
+  // If the packs arrays are present but empty, LI.FI has no route pack
+  // for that direction — treat it as non-transactable.
+  if (v.depositPacks && v.depositPacks.length === 0) return false;
+  if (v.redeemPacks && v.redeemPacks.length === 0) return false;
+  return true;
 }
 
 /**
- * Look up a single vault by address using the list endpoint.
- * The `/v1/earn/vault` detail endpoint returns 404 for many vaults,
- * so we use `/v1/earn/vaults` and filter client-side instead.
+ * Look up a single vault by address. Tries the `/v1/earn/vault` detail
+ * endpoint first (fast, one HTTP call), and only falls back to a paginated
+ * list search if detail returns 404 or errors.
+ *
+ * The list endpoint is paginated with a small default limit, so we bump it
+ * explicitly and pass the asset filter the caller can give us to narrow
+ * the haystack when detail isn't available.
  */
 export async function findVaultByAddress(opts: {
   chainId: number;
   address: string;
+  asset?: string;
 }): Promise<EarnVault | null> {
-  const vaults = await listVaults({ chainId: opts.chainId });
+  try {
+    const detail = await getVaultDetail({ chainId: opts.chainId, address: opts.address });
+    if (detail) return detail;
+  } catch (e) {
+    console.warn(
+      `getVaultDetail failed, falling back to list search: ${(e as Error).message}`,
+    );
+  }
+  const vaults = await listVaults({
+    chainId: opts.chainId,
+    asset: opts.asset,
+    limit: 100,
+  });
   const addr = opts.address.toLowerCase();
   return vaults.find((v) => v.address.toLowerCase() === addr) ?? null;
 }
@@ -185,6 +224,7 @@ export async function bestUsdcVaultOnBase(): Promise<{ address: string; name?: s
       asset: "USDC",
       sortBy: "apy",
       limit: 50,
+      tags: "stablecoin",
     });
     const transactable = vaults.filter(isFullyTransactable);
     if (transactable.length > 0) {

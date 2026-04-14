@@ -48,16 +48,27 @@ DeFi product work, and we'd reach for LI.FI again immediately.
 
 ## What didn't 100% match expectations
 
-- **`isTransactional` / `isRedeemable` are under-documented.** The flags
-  exist on the `/v1/earn/vaults` response and are exactly what you want
-  for "don't pick a vault I can't round-trip" — but we missed them on a
-  first reading of the docs and the example responses we saw didn't
-  include them. We ended up auto-selecting `bbqUSDC` (no LI.FI redeem
-  route) before discovering we should have been filtering on those
-  fields. Calling them out more loudly in the reference — and in the
-  picker example — would save everyone else from the same mistake. (To
-  LI.FI's credit: the flags are already there. This is a docs issue,
-  not a missing-feature issue.)
+- **`isTransactional` / `isRedeemable` / `depositPacks` / `redeemPacks` are
+  under-documented.** Together these are exactly what you want for "don't
+  pick a vault I can't round-trip" — but we missed them on a first reading
+  and the example responses we saw didn't include them. We ended up
+  auto-selecting a non-redeemable vault before discovering we should have
+  been filtering on those fields. In practice `redeemPacks.length === 0` is
+  the strongest signal — stronger than the boolean flag — and it isn't
+  called out anywhere. Highlighting these in the `/v1/earn/vaults`
+  reference (and in the picker example) would save everyone else from the
+  same mistake. (To LI.FI's credit: the fields are already there. This is
+  a docs issue, not a missing-feature issue.)
+
+- **Composer min-amount behaviour for tiny swaps.** Our early test
+  withdrawals were ~2¢ and `/quote` kept rejecting them with
+  `errors.filteredOut[].reason = "Price impact exceeds 10%"`. Totally fair
+  — the price impact really is that bad at those sizes — but on first
+  read we thought the route simply didn't exist for that vault and wrote
+  a fallback path for it. An explicit "minimum economic amount" field (or
+  a distinct error code for "amount too small" vs. "no route exists")
+  would have saved us the detour. Good news: the error JSON was structured
+  enough that we eventually disambiguated it correctly.
 
 - **`estimate.fromAmount` is undocumented / loosely typed on the reverse
   quote.** When calling `/quote/toAmount` we need the required input
@@ -74,8 +85,13 @@ DeFi product work, and we'd reach for LI.FI again immediately.
 
 ## Nice-to-haves
 
-- Put `isTransactional` / `isRedeemable` front and centre in the
-  `/v1/earn/vaults` docs, with an explicit "filter on both if you want
-  vaults LI.FI can round-trip" note.
+- Put `isTransactional` / `isRedeemable` / `redeemPacks` / `depositPacks`
+  front and centre in the `/v1/earn/vaults` docs, with an explicit
+  "filter out any vault where the relevant pack array is empty if you
+  want vaults LI.FI can round-trip" note.
+- Distinct error code (or a `minFromAmountUsd` hint) on `/quote` for
+  "amount too small / price impact too high" vs. "no route exists".
 - Document `estimate.fromAmount` on the `/quote/toAmount` response.
 - One-line APY unit clarification in `/v1/earn/vaults`.
+- Surface `apy1d` / `apy7d` / `apy30d` in the vault reference — they're
+  in the payload and they're exactly what most "past yield" UIs need.

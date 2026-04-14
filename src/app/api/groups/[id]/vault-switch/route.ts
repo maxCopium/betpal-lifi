@@ -68,10 +68,11 @@ export async function POST(
       throw new HttpError(400, "new vault is the same as the current vault");
     }
 
-    // Validate new vault on LI.FI Earn (use list endpoint — detail 404s for many vaults)
+    // Validate new vault on LI.FI Earn — detail endpoint first, list fallback.
     const detail = await findVaultByAddress({
       chainId: Number(group.vault_chain_id),
       address: newVault,
+      asset: "USDC",
     });
     if (!detail) {
       throw new HttpError(400, "vault not found on LI.FI Earn for this chain");
@@ -136,13 +137,14 @@ export async function GET(
       return Response.json({ pending: false });
     }
 
-    // Enrich with vault details (use list endpoint — detail 404s for many vaults)
+    // Enrich with vault details — detail endpoint first, list fallback.
     let newVaultName: string | null = null;
     let newVaultApy: number | undefined;
     try {
       const found = await findVaultByAddress({
         chainId: Number(group.vault_chain_id),
         address: group.pending_vault_address as string,
+        asset: "USDC",
       });
       if (found) {
         newVaultName = found.name ?? null;

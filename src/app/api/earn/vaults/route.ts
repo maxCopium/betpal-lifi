@@ -19,7 +19,13 @@ export async function GET(request: Request): Promise<Response> {
 
     let vaults;
     try {
-      vaults = await listVaults({ chainId, asset, sortBy: "tvl", limit: Math.max(limit, 20) });
+      vaults = await listVaults({
+        chainId,
+        asset,
+        sortBy: "tvl",
+        limit: Math.max(limit, 20),
+        tags: "stablecoin",
+      });
     } catch (fetchErr) {
       throw new HttpError(502, `LI.FI Earn API failed: ${(fetchErr as Error).message}`);
     }
