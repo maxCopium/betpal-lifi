@@ -10,8 +10,9 @@ import { env } from "@/lib/env";
  * API key is mandatory (breaking change rolled out by LI.FI on 2026-04-18).
  * Same key used for Composer `/v1/quote` — sent via `x-lifi-api-key` header.
  *
- * Data paths no longer include the `/earn/` subpath — `/v1/earn/vaults` →
- * `/v1/vaults`, `/v1/earn/vault` → `/v1/vault` (rolled out 2026-04-18).
+ * Data paths no longer include the `/earn/` subpath (rolled out 2026-04-18):
+ *   - `/v1/earn/vaults`               → `/v1/vaults`
+ *   - `/v1/earn/vault?chainId=…&addr` → `/v1/vaults/{chainId}/{address}`
  *
  * Used for:
  *   - Vault discovery (find Morpho USDC on Base, or any vault by chain/asset)
@@ -143,21 +144,23 @@ export async function listVaults(opts: {
 }
 
 /**
- * GET /v1/vault — full detail for a single vault.
+ * GET /v1/vaults/{chainId}/{address} — full detail for a single vault.
  * Returns APY breakdown (base/reward/total), historical APY (1d/7d/30d), TVL.
  *
- * ⚠️  This endpoint 404s for many vaults that `/v1/vaults` lists just
- * fine (e.g. bbqUSDC on Base). Callers MUST be prepared to fall back to a
- * list search. Returns null on 404 so callers can do exactly that.
+ * Path-based REST shape (rolled out 2026-04-18 along with the /earn/
+ * subpath drop). Old query-based `/v1/vault?chainId=…&address=…` no
+ * longer exists.
+ *
+ * ⚠️  This endpoint still 404s for some vaults that `/v1/vaults` lists
+ * fine. Callers MUST be prepared to fall back to a list search. Returns
+ * null on 404 so callers can do exactly that.
  */
 export async function getVaultDetail(opts: {
   chainId: number;
   address: string;
 }): Promise<EarnVault | null> {
-  const url = new URL(`${EARN_BASE}/v1/vault`);
-  url.searchParams.set("chainId", String(opts.chainId));
-  url.searchParams.set("address", opts.address);
-  const res = await fetch(url.toString(), {
+  const url = `${EARN_BASE}/v1/vaults/${opts.chainId}/${opts.address}`;
+  const res = await fetch(url, {
     headers: earnHeaders(),
     next: { revalidate: 60 }, // cache 1 min — APY changes often
   });
@@ -165,7 +168,7 @@ export async function getVaultDetail(opts: {
   if (!res.ok) {
     const body = await res.text();
     throw new Error(
-      `Earn /v1/vault failed: ${res.status} ${body.slice(0, 500)}`,
+      `Earn /v1/vaults/{chainId}/{address} failed: ${res.status} ${body.slice(0, 500)}`,
     );
   }
   const json = await res.json();
