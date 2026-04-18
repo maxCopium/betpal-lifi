@@ -13,7 +13,7 @@ type VaultInfo = {
 
 /**
  * Fetches live vault details (APY, TVL) from /api/earn/vault.
- * Backed by LI.FI Earn /v1/earn/vault endpoint.
+ * Backed by LI.FI Earn /v1/vault endpoint.
  */
 export function useVaultInfo(chainId: number, vaultAddress: string) {
   const [info, setInfo] = useState<VaultInfo | null>(null);

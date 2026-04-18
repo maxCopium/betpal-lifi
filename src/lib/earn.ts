@@ -1,21 +1,32 @@
 import "server-only";
 import { z } from "zod";
 import { BASE_CHAIN_ID } from "./constants";
+import { env } from "@/lib/env";
 
 /**
  * LI.FI Earn Data API wrapper.
  * Base URL: https://earn.li.fi
- * No auth required.
+ *
+ * API key is mandatory (breaking change rolled out by LI.FI on 2026-04-18).
+ * Same key used for Composer `/v1/quote` — sent via `x-lifi-api-key` header.
+ *
+ * Data paths no longer include the `/earn/` subpath — `/v1/earn/vaults` →
+ * `/v1/vaults`, `/v1/earn/vault` → `/v1/vault` (rolled out 2026-04-18).
  *
  * Used for:
  *   - Vault discovery (find Morpho USDC on Base, or any vault by chain/asset)
  *   - APY/TVL analytics for the dashboard
  *   - Future: group-vote on yield markets
- *
- * Verified against live API on 2026-04-10.
  */
 
 const EARN_BASE = "https://earn.li.fi";
+
+function earnHeaders(): Record<string, string> {
+  return {
+    accept: "application/json",
+    "x-lifi-api-key": env.lifiApiKey(),
+  };
+}
 
 const VaultSchema = z
   .object({
@@ -97,7 +108,7 @@ export function vaultProtocolName(v: EarnVault): string | undefined {
 }
 
 /**
- * GET /v1/earn/vaults — list yield opportunities.
+ * GET /v1/vaults — list yield opportunities.
  *
  * Supports filtering by chainId, asset symbol, and sorting by apy.
  */
@@ -108,7 +119,7 @@ export async function listVaults(opts: {
   limit?: number;
   tags?: string | string[];
 }): Promise<EarnVault[]> {
-  const url = new URL(`${EARN_BASE}/v1/earn/vaults`);
+  const url = new URL(`${EARN_BASE}/v1/vaults`);
   if (opts.chainId) url.searchParams.set("chainId", String(opts.chainId));
   if (opts.asset) url.searchParams.set("asset", opts.asset);
   if (opts.sortBy) url.searchParams.set("sortBy", opts.sortBy);
@@ -118,12 +129,12 @@ export async function listVaults(opts: {
     url.searchParams.set("tags", tags);
   }
   const res = await fetch(url.toString(), {
-    headers: { accept: "application/json" },
+    headers: earnHeaders(),
   });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(
-      `Earn /v1/earn/vaults failed: ${res.status} ${body.slice(0, 500)}`,
+      `Earn /v1/vaults failed: ${res.status} ${body.slice(0, 500)}`,
     );
   }
   const json = await res.json();
@@ -132,10 +143,10 @@ export async function listVaults(opts: {
 }
 
 /**
- * GET /v1/earn/vault — full detail for a single vault.
+ * GET /v1/vault — full detail for a single vault.
  * Returns APY breakdown (base/reward/total), historical APY (1d/7d/30d), TVL.
  *
- * ⚠️  This endpoint 404s for many vaults that `/v1/earn/vaults` lists just
+ * ⚠️  This endpoint 404s for many vaults that `/v1/vaults` lists just
  * fine (e.g. bbqUSDC on Base). Callers MUST be prepared to fall back to a
  * list search. Returns null on 404 so callers can do exactly that.
  */
@@ -143,18 +154,18 @@ export async function getVaultDetail(opts: {
   chainId: number;
   address: string;
 }): Promise<EarnVault | null> {
-  const url = new URL(`${EARN_BASE}/v1/earn/vault`);
+  const url = new URL(`${EARN_BASE}/v1/vault`);
   url.searchParams.set("chainId", String(opts.chainId));
   url.searchParams.set("address", opts.address);
   const res = await fetch(url.toString(), {
-    headers: { accept: "application/json" },
+    headers: earnHeaders(),
     next: { revalidate: 60 }, // cache 1 min — APY changes often
   });
   if (res.status === 404) return null;
   if (!res.ok) {
     const body = await res.text();
     throw new Error(
-      `Earn /v1/earn/vault failed: ${res.status} ${body.slice(0, 500)}`,
+      `Earn /v1/vault failed: ${res.status} ${body.slice(0, 500)}`,
     );
   }
   const json = await res.json();
@@ -179,7 +190,7 @@ export function isFullyTransactable(v: EarnVault): boolean {
 }
 
 /**
- * Look up a single vault by address. Tries the `/v1/earn/vault` detail
+ * Look up a single vault by address. Tries the `/v1/vault` detail
  * endpoint first (fast, one HTTP call), and only falls back to a paginated
  * list search if detail returns 404 or errors.
  *
