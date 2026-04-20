@@ -51,14 +51,22 @@ export async function requireUser(req: Request): Promise<AuthedUser> {
     throw new HttpError(401, `invalid token: ${(e as Error).message}`);
   }
 
-  // Pull the linked wallet via the Privy server API. We need the embedded
-  // wallet address for deposits and payouts, so it's not optional.
+  // Pull the linked wallet via the Privy server API. We need a wallet
+  // address for deposits and payouts, so it's not optional — but any
+  // linked wallet works (embedded Privy wallet preferred, external
+  // wallets like MetaMask fall back cleanly).
   const privyUser = await privy().getUser(claims.userId);
-  const wallet = privyUser.linkedAccounts?.find(
-    (a) => a.type === "wallet" && (a as { walletClientType?: string }).walletClientType === "privy",
-  ) as { address?: string } | undefined;
+  const wallets = (privyUser.linkedAccounts ?? []).filter(
+    (a) => a.type === "wallet",
+  ) as Array<{ address?: string; walletClientType?: string }>;
+  // Prefer the Privy-embedded wallet if present, else take any linked wallet.
+  const wallet =
+    wallets.find((w) => w.walletClientType === "privy") ?? wallets[0];
   if (!wallet?.address) {
-    throw new HttpError(400, "user has no linked wallet");
+    throw new HttpError(
+      400,
+      "user has no linked wallet — sign out and sign back in, or link a wallet in your account",
+    );
   }
 
   const sb = supabaseService();
