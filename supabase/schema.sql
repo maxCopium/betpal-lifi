@@ -326,3 +326,24 @@ DO $$ BEGIN
       'pending','executing','completed','failed','reverted','expired','partial'
     ));
 END $$;
+
+-- =============================================================================
+-- ROW LEVEL SECURITY
+-- =============================================================================
+-- All DB access goes through `supabaseService()` using SUPABASE_SECRET_KEY,
+-- which bypasses RLS. Enabling RLS with no policies locks these tables from
+-- the anon / publishable key (browser-side), so an accidental future
+-- `createClient(url, anonKey)` can't read or write anything. If you later
+-- want a direct-from-browser read path, add an explicit policy per table.
+alter table users                 enable row level security;
+alter table groups                enable row level security;
+alter table group_members         enable row level security;
+alter table friendships           enable row level security;
+alter table bets                  enable row level security;
+alter table stakes                enable row level security;
+alter table balance_events        enable row level security;
+alter table transactions          enable row level security;
+alter table polymarket_cache      enable row level security;
+alter table invite_links          enable row level security;
+alter table cancel_votes          enable row level security;
+alter table force_resolve_votes   enable row level security;
